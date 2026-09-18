@@ -1,0 +1,46 @@
+{
+  "name": "recast",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Convert almost any file: images, video, audio, documents, ebooks, spreadsheets, data, archives, fonts and subtitles.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --no-experimental-webstorage server/index.js",
+    "dev": "node --no-experimental-webstorage --watch-path=server server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@turbodocx/html-to-docx": "^1.23.1",
+    "7zip-bin": "^5.2.0",
+    "archiver": "^8.0.0",
+    "docx": "^9.7.1",
+    "express": "^5.2.1",
+    "fast-xml-parser": "^5.11.1",
+    "ffmpeg-static": "^5.3.0",
+    "fonteditor-core": "^2.6.3",
+    "heic-decode": "^2.1.0",
+    "html-to-text": "^10.0.1",
+    "js-yaml": "^5.4.2",
+    "mammoth": "^1.12.3",
+    "marked": "^18.0.13",
+    "multer": "^2.4.0",
+    "mupdf": "^1.28.1",
+    "papaparse": "^5.7.0",
+    "pdf-lib": "^1.17.1",
+    "potrace": "^2.1.8",
+    "puppeteer-core": "^25.11.0",
+    "sharp": "^0.35.4",
+    "smol-toml": "^1.8.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.3.0": true,
+    "@turbodocx/html-to-docx@1.23.1": true
+  }
+}

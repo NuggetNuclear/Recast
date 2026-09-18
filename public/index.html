@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recast — Convert any file</title>
+  <meta name="description" content="Convert images, video, audio, documents, ebooks, spreadsheets, data, archives, fonts and subtitles — with full control over every setting.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231c1917'/%3E%3Cpath d='M10 12.5h11l-3.2-3.2M22 19.5H11l3.2 3.2' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/vendor/inter/index.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>
+    try {
+      const t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#/" aria-label="Recast home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="currentColor"/><path d="M10 12.5h11l-3.2-3.2M22 19.5H11l3.2 3.2" fill="none" stroke="var(--bg)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand-name">Recast</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#/" data-nav="convert">Convert</a>
+        <a href="#/formats" data-nav="formats">Formats</a>
+        <button type="button" class="nav-btn" id="enginesBtn">Engines</button>
+      </nav>
+      <div class="topbar-actions">
+        <button type="button" class="icon-btn" id="themeBtn" aria-label="Toggle theme" title="Theme"></button>
+      </div>
+    </div>
+  </header>
+
+  <main id="view" class="wrap"></main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span>Recast runs entirely on this computer. Files are deleted automatically after <span id="retention">2 hours</span>.</span>
+      <span class="footer-dim" id="engineSummary"></span>
+    </div>
+  </footer>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <input type="file" id="fileInput" multiple hidden>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
