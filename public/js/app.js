@@ -531,21 +531,64 @@ function openSettings(row) {
 }
 
 function openUrlImport() {
-  const input = h('input.input', { type: 'url', placeholder: 'https://example.com/file.pdf', spellcheck: 'false' });
+  const hasYtdlp = !!state.meta.engines.find((e) => e.id === 'ytdlp')?.available;
+  const input = h('input.input', { type: 'url', placeholder: hasYtdlp ? 'https://example.com/file.pdf or a YouTube link' : 'https://example.com/file.pdf', spellcheck: 'false' });
+  const mode = h('select.select', {},
+    h('option', { value: 'auto' }, 'Automatic'),
+    h('option', { value: 'video' }, 'Video'),
+    h('option', { value: 'audio' }, 'Audio only'),
+    h('option', { value: 'file' }, 'File as-is'));
+  const quality = h('select.select', {},
+    h('option', { value: 'best' }, 'Best available'),
+    ...['2160', '1440', '1080', '720', '480', '360'].map((q) => h('option', { value: q }, `Up to ${q}p`)));
+  const qualityField = h('div.field', h('div.field-label', 'Max. resolution'), quality);
+  mode.addEventListener('change', () => { qualityField.hidden = mode.value === 'audio' || mode.value === 'file'; });
+  const status = h('div.import-status', { hidden: true });
   const go = h('button.btn.btn-primary', { type: 'button' }, 'Import');
+  let importId = null;
+  let closed = false;
   const m = modal({
     title: 'Add from URL',
-    subtitle: 'The file is downloaded by the Recast server on this computer.',
-    body: h('form', { onsubmit: (e) => { e.preventDefault(); go.click(); } }, input),
+    subtitle: hasYtdlp
+      ? 'Direct file links, or video/audio pages from YouTube, Vimeo, SoundCloud and 1,800+ other sites (via yt-dlp).'
+      : 'The file is downloaded by the Recast server. Install yt-dlp to also download from YouTube and other video sites.',
+    body: h('form', { onsubmit: (e) => { e.preventDefault(); go.click(); } }, input,
+      hasYtdlp ? h('div.import-opts', h('div.field', h('div.field-label', 'Download as'), mode), qualityField) : null,
+      status),
     actions: [h('button.btn', { type: 'button', onclick: () => m.close() }, 'Cancel'), go],
+    onClose: () => { closed = true; if (importId) api.cancelImport(importId); },
   });
+  const showStatus = (text, progress) => {
+    status.hidden = false;
+    status.replaceChildren(h('span', text),
+      h('div.import-bar', { class: progress == null ? 'indeterminate' : '' }, h('i', { style: { width: progress == null ? undefined : `${Math.round(progress * 100)}%` } })));
+  };
+  const reset = () => {
+    importId = null;
+    go.disabled = false;
+    go.replaceChildren('Import');
+    status.hidden = true;
+  };
   go.addEventListener('click', async () => {
     const url = input.value.trim();
     if (!url) return input.focus();
     go.disabled = true;
     go.replaceChildren(h('span.spinner', { style: { borderTopColor: 'currentColor' } }), 'Downloading…');
+    showStatus('Connecting…', null);
     try {
-      const up = await api.importUrl(url);
+      let imp = await api.startImport(url, hasYtdlp ? mode.value : 'file', quality.value);
+      importId = imp.id;
+      while (imp.status === 'running') {
+        await new Promise((r) => setTimeout(r, 700));
+        if (closed) return;
+        imp = await api.importStatus(importId);
+        const pct = imp.progress != null && imp.progress > 0 ? ` ${Math.round(imp.progress * 100)}%` : '';
+        showStatus(`${imp.stage || 'Downloading…'}${pct}`, imp.progress);
+      }
+      importId = null;
+      if (closed) return;
+      if (imp.status === 'error') { const err = new Error(imp.error); err.details = imp.details; throw err; }
+      const up = imp.upload;
       const row = newRow({ name: up.name, size: up.size, format: up.format, upload: up, status: 'ready' });
       if (state.preset && targetsOf(up.format).includes(state.preset)) row.target = state.preset;
       state.rows.push(row);
@@ -553,9 +596,9 @@ function openUrlImport() {
       renderShell();
       if (row.target) loadRoute(row);
     } catch (e) {
+      if (closed) return;
       toast(e.message, { type: 'error' });
-      go.disabled = false;
-      go.replaceChildren('Import');
+      reset();
     }
   });
 }

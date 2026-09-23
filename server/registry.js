@@ -18,8 +18,9 @@ import trace from './engines/trace.js';
 import office from './engines/office.js';
 import pandoc from './engines/pandoc.js';
 import ebook from './engines/ebook.js';
+import ytdlp from './download.js';
 
-export const ENGINES = [image, media, subtitle, pdf, imagepdf, browser, markup, data, sheet, archive, font, trace, office, pandoc, ebook];
+export const ENGINES = [image, media, subtitle, pdf, imagepdf, browser, markup, data, sheet, archive, font, trace, office, pandoc, ebook, ytdlp];
 const byId = Object.fromEntries(ENGINES.map((e) => [e.id, e]));
 
 const HOP_PENALTY = 0.5;

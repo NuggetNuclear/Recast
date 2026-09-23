@@ -1,0 +1,23 @@
+services:
+  recast:
+    build: .
+    image: recast
+    container_name: recast
+    restart: unless-stopped
+    ports:
+      - "${RECAST_PORT:-3000}:3000"
+    environment:
+      RETENTION_MINUTES: ${RETENTION_MINUTES:-120}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-8192}
+      JOB_TIMEOUT_MIN: ${JOB_TIMEOUT_MIN:-180}
+      YTDLP_AUTO_UPDATE: ${YTDLP_AUTO_UPDATE:-1}
+      # Optional: put a cookies.txt exported from your browser in ./cookies
+      # if YouTube asks you to sign in.
+      YTDLP_COOKIES: /cookies/cookies.txt
+    volumes:
+      - recast-data:/app/data
+      - ./cookies:/cookies:ro
+    shm_size: 1gb
+
+volumes:
+  recast-data:

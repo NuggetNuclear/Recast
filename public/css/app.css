@@ -656,3 +656,13 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Add from URL */
+.import-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.import-opts .field[hidden] { display: none; }
+.import-status { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.import-status[hidden] { display: none; }
+.import-bar { height: 4px; border-radius: 4px; overflow: hidden; background: var(--surface-3); }
+.import-bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .35s ease; }
+.import-bar.indeterminate i { width: 30%; animation: indet 1.2s ease-in-out infinite; }
+@media (max-width: 520px) { .import-opts { grid-template-columns: 1fr; } }

@@ -92,7 +92,11 @@ export function findTools() {
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
   ]);
 
-  return { ffmpeg, sevenZip, sevenZipFull, soffice, pandoc, calibre, magick, browser };
+  const ytdlp = locate('YTDLP_PATH', ['yt-dlp'], [
+    path.join(LAD, 'Microsoft', 'WinGet', 'Links', 'yt-dlp.exe'),
+  ], ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp', '/opt/homebrew/bin/yt-dlp']);
+
+  return { ffmpeg, sevenZip, sevenZipFull, soffice, pandoc, calibre, magick, browser, ytdlp };
 }
 
 export let tools = findTools();

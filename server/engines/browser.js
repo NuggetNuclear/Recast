@@ -39,7 +39,10 @@ async function launch() {
   const child = spawn(tools.browser, [
     '--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions',
     '--disable-background-networking', '--disable-sync', '--disable-component-update', '--disable-default-apps',
-    '--mute-audio', '--hide-scrollbars', '--no-pings', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
+    '--mute-audio', '--hide-scrollbars', '--no-pings', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    // Containers usually lack the namespaces Chromium's sandbox needs, and have a tiny /dev/shm.
+    ...(process.env.BROWSER_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
+    'about:blank',
   ], { detached: true, stdio: 'ignore', windowsHide: true });
   child.on('error', () => {});
   child.unref();
