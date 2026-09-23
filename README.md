@@ -11,7 +11,14 @@ npm start
 
 Then open <http://localhost:3000>. Use `npm run dev` to auto-restart the server while editing `server/`.
 
-Requires Node.js 20+. FFmpeg, libvips, MuPDF and 7-Zip ship with the npm dependencies. PDF rendering of HTML/Markdown uses the Edge or Chrome already installed on the machine.
+Requires Node.js 20+. FFmpeg, libvips, MuPDF and 7-Zip ship with the npm dependencies. PDF rendering of HTML/Markdown uses the Edge or Chrome already installed on the machine. YouTube links need yt-dlp and, for yt-dlp's JavaScript solver, Node.js 22 or newer.
+
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | Process model, uploads and jobs, the route graph, the engine contract, the HTTP API |
+| [docs/decisions.md](docs/decisions.md) | Why the router, the engines, and the link importer behave the way they do, including what broke against a real yt-dlp and a real YouTube link |
 
 ## What it converts
 
@@ -33,11 +40,11 @@ Requires Node.js 20+. FFmpeg, libvips, MuPDF and 7-Zip ship with the npm depende
 
 When no single engine can do a conversion, Recast chains them automatically (for example DOCX → HTML → PDF → PNG) and exposes the settings of every step.
 
-Other features: batch conversion, “Convert all to…”, merging PDFs and images into one PDF, import from URL, paste from clipboard, per-file settings with “apply to all”, download everything as one ZIP, light/dark themes.
+Other features: batch conversion, “Convert all to…”, merging PDFs and images into one PDF, import from a URL (a direct file, or a YouTube/page link via yt-dlp), paste from clipboard, per-file settings with “apply to all”, download everything as one ZIP, light/dark themes.
 
 ## Optional engines
 
-Install any of these and click **Engines → Rescan** (or restart) to unlock more formats:
+Install any of these and click **Engines → Rescan** (or restart) to unlock more formats. yt-dlp unlocks link downloads rather than extra formats:
 
 | Tool | Adds | Install (Windows) |
 | --- | --- | --- |
@@ -45,8 +52,19 @@ Install any of these and click **Engines → Rescan** (or restart) to unlock mor
 | Pandoc | reStructuredText, LaTeX, Org, AsciiDoc, Textile, MediaWiki, Typst, Jupyter, EPUB | `winget install JohnMacFarlane.Pandoc` |
 | Calibre | MOBI, AZW3, FB2, LIT, LRF and professional ebook conversion | `winget install calibre.calibre` |
 | ImageMagick | Camera RAW (CR2, NEF, ARW, DNG…), XCF, JPEG XL | `winget install ImageMagick.ImageMagick` |
+| yt-dlp | YouTube and most other sites when you paste a link | `winget install yt-dlp.yt-dlp` |
 
-Tools are found on `PATH` or in their default install folders; you can also point to them with `SOFFICE_PATH`, `PANDOC_PATH`, `CALIBRE_PATH`, `MAGICK_PATH`, `FFMPEG_PATH`, `SEVENZIP_PATH` or `BROWSER_PATH`.
+On Linux, the standalone binary does not need a system Python:
+
+```bash
+mkdir -p ~/.local/bin
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o ~/.local/bin/yt-dlp
+chmod +x ~/.local/bin/yt-dlp
+```
+
+Put `~/.local/bin` on `PATH`, or set `YTDLP_PATH` to the binary. On macOS, `brew install yt-dlp`. Recast uses the FFmpeg it already ships to merge video and audio, and points yt-dlp at the Node.js process that is running the server so YouTube's JavaScript challenges can be solved. For a video that requires a sign-in, set `YTDLP_COOKIES` to a `cookies.txt` file exported from your own browser. After installing, click **Engines → Rescan**.
+
+Tools are found on `PATH` or in their default install folders; you can also point to them with `SOFFICE_PATH`, `PANDOC_PATH`, `CALIBRE_PATH`, `MAGICK_PATH`, `FFMPEG_PATH`, `FFPROBE_PATH`, `SEVENZIP_PATH`, `BROWSER_PATH` or `YTDLP_PATH`.
 
 ## Configuration
 
@@ -58,35 +76,56 @@ Tools are found on `PATH` or in their default install folders; you can also poin
 | `RETENTION_MINUTES` | `120` | Files are deleted after this long |
 | `MAX_UPLOAD_MB` | `4096` | Maximum upload size |
 | `CONCURRENCY` | 2–4 (by CPU) | Conversions running at the same time |
-| `JOB_TIMEOUT_MIN` | `120` | Maximum time for a single conversion |
+| `JOB_TIMEOUT_MIN` | `120` | Maximum time for a single conversion or link download |
+| `YTDLP_PATH` | | Path to the yt-dlp binary, if it is not on `PATH` |
+| `YTDLP_COOKIES` | | `cookies.txt` exported from your browser, for sites that require a sign-in |
 
 The data directory is wiped when the server starts.
 
 ## Project layout
 
 ```
+docs/
+  architecture.md   how the process, the queue, and the route graph fit together
+  decisions.md      choices and the yt-dlp / YouTube behaviour behind them
 server/
-  index.js          HTTP API (uploads, jobs, downloads)
-  jobs.js           upload store, job queue, clean-up
+  index.js          HTTP API and static files
+  jobs.js           upload store, conversion queue, retention
+  fetch.js          link import: direct download or yt-dlp
   registry.js       engine registry and conversion router (chaining)
   formats.js        format catalogue and aliases
+  schema.js         option fields the engines declare and the page renders
+  tools.js          where external binaries are found
   engines/          one module per engine: routes, option schema, convert()
 public/
-  index.html, css/app.css, js/*.js   the single-page UI (no build step)
+  index.html, css/app.css, js/*.js   the page (ES modules, no build step)
 ```
 
-Each engine declares the routes it supports, an option schema the UI renders as a form, and a `convert()` function. Adding a format usually means adding it to `formats.js` and to an engine's route list.
+Each engine declares the routes it supports, an option schema the UI renders as a form, and a `convert()` function. Adding a format usually means adding it to `formats.js` and to an engine's route list. The full contract is in [docs/architecture.md](docs/architecture.md).
 
 ## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/meta` | Formats, categories, reachable targets per format, engine status |
+| `POST` | `/api/engines/rescan` | Find newly installed tools and return a fresh meta payload |
 | `POST` | `/api/uploads` | Multipart upload (`file`) → upload id + probed info |
-| `POST` | `/api/uploads/url` | `{ url }` → download on the server |
+| `GET` | `/api/uploads/:id` | One upload |
+| `DELETE` | `/api/uploads/:id` | Delete an upload |
+| `POST` | `/api/uploads/url` | `{ url, preference?, playlist?, subtitles? }` starts a download. `preference` is `auto` (default), `best`, `1080`, `720`, `480` or `audio`. Returns `202` and a fetch id. |
+| `GET` | `/api/fetches/:id` | Progress. When `status` is `done`, `uploads` lists the imported files. |
+| `POST` | `/api/fetches/:id/cancel` | Cancel a link download |
 | `GET` | `/api/route?upload=ID&to=fmt` | Conversion chain and option schema for every step |
+| `GET` | `/api/merge/schema` | Options for the merge dialog |
 | `POST` | `/api/jobs` | `{ uploadId, to, options: [ {…step 1}, … ] }` |
 | `GET` | `/api/jobs?ids=a,b` | Status and progress |
+| `GET` | `/api/jobs/:id` | One job |
+| `POST` | `/api/jobs/:id/cancel` | Cancel a queued or running conversion |
+| `DELETE` | `/api/jobs/:id` | Delete a job and its output |
 | `GET` | `/api/jobs/:id/download` | Result (ZIP when there are several outputs) |
+| `GET` | `/api/jobs/:id/files/:index` | One output. `?inline=1` displays it instead of downloading. |
 | `POST` | `/api/merge` | `{ uploadIds, options, name }` → one PDF |
 | `GET` | `/api/download?jobs=a,b` | Every result as one ZIP |
+| `GET` | `/api/health` | Process is up, plus upload and queue counts |
+
+Request and response shapes, status values, and why link downloads are asynchronous are in [docs/architecture.md](docs/architecture.md).
