@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import express from 'express';
 import multer from 'multer';
 import { ZipArchive } from 'archiver';
@@ -12,6 +9,7 @@ import { CATEGORIES, FORMATS, ALIASES } from './formats.js';
 import { initEngines, rescan, allTargets, engineStatus, findRoute, routeSchema, shutdownEngines } from './registry.js';
 import { pdfPageSchema } from './engines/imagepdf.js';
 import * as store from './jobs.js';
+import { startFetch, getFetch, publicFetch, cancelFetch, sweepFetches, resetFetches } from './fetch.js';
 import { UserError, ensureDir, safeName } from './util.js';
 
 const app = express();
@@ -75,61 +73,22 @@ app.post('/api/uploads', upload.single('file'), wrap(async (req, res) => {
   res.json(store.uploadJson(up));
 }));
 
-const MIME_EXT = {
-  'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/avif': 'avif',
-  'text/html': 'html', 'text/plain': 'txt', 'text/markdown': 'md', 'text/csv': 'csv', 'application/json': 'json', 'application/xml': 'xml', 'text/xml': 'xml',
-  'video/mp4': 'mp4', 'video/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/ogg': 'ogg', 'application/zip': 'zip',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-};
-
 app.post('/api/uploads/url', wrap(async (req, res) => {
-  let url;
-  try { url = new URL(String(req.body?.url || '').trim()); } catch { throw new UserError('That does not look like a valid URL'); }
-  if (!['http:', 'https:'].includes(url.protocol)) throw new UserError('Only http and https links are supported');
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 120_000);
-  let r;
-  try {
-    r = await fetch(url, { signal: ctrl.signal, redirect: 'follow', headers: { 'user-agent': `Mozilla/5.0 ${config.appName}/1.0` } });
-  } catch (e) {
-    clearTimeout(timer);
-    throw new UserError(`Could not download the file: ${e.cause?.code || e.message}`);
-  }
-  if (!r.ok || !r.body) { clearTimeout(timer); throw new UserError(`The server answered ${r.status} ${r.statusText}`); }
-  const len = Number(r.headers.get('content-length') || 0);
-  if (len > config.maxUploadBytes) { clearTimeout(timer); throw new UserError('The file is larger than the upload limit'); }
-  const cd = r.headers.get('content-disposition') || '';
-  let name = (cd.match(/filename\*=UTF-8''([^;]+)/i) || [])[1];
-  if (name) name = decodeURIComponent(name);
-  else name = (cd.match(/filename="?([^";]+)"?/i) || [])[1];
-  if (!name) name = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || '') || url.hostname;
-  if (!/\.[a-z0-9]{1,8}$/i.test(name)) {
-    const ext = MIME_EXT[(r.headers.get('content-type') || '').split(';')[0].trim()];
-    if (ext) name += `.${ext}`;
-  }
-  name = safeName(name, 'download');
-  const id = randomUUID();
-  const dir = await ensureDir(path.join(dirs.uploads, id));
-  const filePath = path.join(dir, name);
-  let size = 0;
-  const limiter = new TransformStream({
-    transform(chunk, controller) {
-      size += chunk.byteLength;
-      if (size > config.maxUploadBytes) controller.error(new UserError('The file is larger than the upload limit'));
-      else controller.enqueue(chunk);
-    },
-  });
-  try {
-    await pipeline(Readable.fromWeb(r.body.pipeThrough(limiter)), fs.createWriteStream(filePath));
-  } catch (e) {
-    await fsp.rm(dir, { recursive: true, force: true });
-    throw e.userFacing ? e : new UserError(`Download failed: ${e.message}`);
-  } finally {
-    clearTimeout(timer);
-  }
-  const up = await store.registerUpload({ id, filePath, name, size });
-  res.json(store.uploadJson(up));
+  const job = startFetch(req.body || {});
+  res.status(202).json(publicFetch(job));
 }));
+
+app.get('/api/fetches/:id', (req, res) => {
+  const job = getFetch(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Download not found' });
+  res.json(publicFetch(job));
+});
+
+app.post('/api/fetches/:id/cancel', (req, res) => {
+  cancelFetch(req.params.id);
+  const job = getFetch(req.params.id);
+  res.json(job ? publicFetch(job) : { ok: true });
+});
 
 app.get('/api/uploads/:id', (req, res) => {
   const up = store.getUpload(req.params.id);
@@ -264,9 +223,10 @@ app.use((err, req, res, next) => {
 // ---------- start
 async function main() {
   await store.resetStorage();
+  await resetFetches();
   await ensureDir(dirs.profiles);
   const status = await initEngines();
-  const sweep = setInterval(() => store.sweep().catch(() => {}), 5 * 60 * 1000);
+  const sweep = setInterval(() => { store.sweep().catch(() => {}); sweepFetches(); }, 5 * 60 * 1000);
   sweep.unref();
   const server = app.listen(config.port, config.host, () => {
     const on = Object.entries(status).filter(([, s]) => s.available).map(([id]) => id);

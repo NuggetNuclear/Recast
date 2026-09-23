@@ -22,4 +22,5 @@ export const dirs = {
   uploads: path.join(config.dataDir, 'uploads'),
   jobs: path.join(config.dataDir, 'jobs'),
   profiles: path.join(config.dataDir, 'profiles'),
+  fetches: path.join(config.dataDir, 'fetches'),
 };

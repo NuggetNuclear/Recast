@@ -559,6 +559,8 @@ kbd {
 .modal-head p { margin: 4px 0 0; color: var(--text-2); font-size: 13px; }
 .modal-head .close { margin-left: auto; margin-top: -4px; margin-right: -6px; }
 .modal-body { padding: 4px 20px 18px; overflow-y: auto; }
+.url-form { display: flex; flex-direction: column; gap: 14px; }
+.url-form .input { height: 40px; }
 .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 
 .engine { display: grid; grid-template-columns: 10px 1fr auto; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--border); }
