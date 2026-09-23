@@ -16,10 +16,12 @@ export class UserError extends Error {
  * Spawn a process and collect its output.
  * Rejects with a UserError carrying the stderr tail when the exit code is non-zero.
  */
-export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs, errorMessage, okCodes = [0] } = {}) {
+export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs, errorMessage, timeoutMessage, okCodes = [0], killGroup = false } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new UserError('Cancelled'));
-    const child = spawn(cmd, args, { cwd, env: env ? { ...process.env, ...env } : process.env, windowsHide: true });
+    // A new process group lets us stop yt-dlp together with the ffmpeg it spawns.
+    const detached = killGroup && process.platform !== 'win32';
+    const child = spawn(cmd, args, { cwd, env: env ? { ...process.env, ...env } : process.env, windowsHide: true, detached });
     let stdout = '';
     let stderr = '';
     let killedByUs = false;
@@ -36,6 +38,11 @@ export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs
     });
     const kill = () => {
       killedByUs = true;
+      if (detached && child.pid) {
+        try { process.kill(-child.pid, 'SIGKILL'); } catch {}
+      } else if (killGroup && process.platform === 'win32' && child.pid) {
+        spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true });
+      }
       try { child.kill('SIGKILL'); } catch {}
     };
     signal?.addEventListener('abort', kill, { once: true });
@@ -47,7 +54,7 @@ export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs
     child.on('close', (code) => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', kill);
-      if (killedByUs) return reject(new UserError(signal?.aborted ? 'Cancelled' : 'The conversion timed out'));
+      if (killedByUs) return reject(new UserError(signal?.aborted ? 'Cancelled' : (timeoutMessage || 'The conversion timed out')));
       if (okCodes.includes(code)) return resolve({ code, stdout, stderr });
       const tail = (stderr || stdout).trim().split(/\r?\n/).slice(-25).join('\n');
       reject(new UserError(errorMessage || `${path.basename(cmd)} exited with code ${code}`, tail));

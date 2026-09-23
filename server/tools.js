@@ -79,6 +79,19 @@ export function findTools() {
 
   const magick = locate('MAGICK_PATH', ['magick'], [path.join(PF, 'ImageMagick-*', 'magick.exe')], ['/usr/bin/magick', '/usr/local/bin/magick', '/opt/homebrew/bin/magick']);
 
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  const ytDlp = locate('YTDLP_PATH', ['yt-dlp', 'yt-dlp_linux', 'yt-dlp_macos'], [
+    path.join(LAD, 'Microsoft', 'WinGet', 'Links', 'yt-dlp.exe'),
+    path.join(PF, 'yt-dlp', 'yt-dlp.exe'),
+    home && path.join(home, 'scoop', 'shims', 'yt-dlp.exe'),
+  ], [
+    '/usr/bin/yt-dlp',
+    '/usr/local/bin/yt-dlp',
+    '/snap/bin/yt-dlp',
+    '/opt/homebrew/bin/yt-dlp',
+    home && path.join(home, '.local', 'bin', 'yt-dlp'),
+  ]);
+
   const browser = locate('BROWSER_PATH', isWin ? [] : ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge'], [
     path.join(PF86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
     path.join(PF, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
@@ -92,11 +105,15 @@ export function findTools() {
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
   ]);
 
-  const ytdlp = locate('YTDLP_PATH', ['yt-dlp'], [
-    path.join(LAD, 'Microsoft', 'WinGet', 'Links', 'yt-dlp.exe'),
-  ], ['/usr/local/bin/yt-dlp', '/usr/bin/yt-dlp', '/opt/homebrew/bin/yt-dlp']);
+  let ffprobe = locate('FFPROBE_PATH', ['ffprobe'], [
+    path.join(PF, 'ffmpeg', 'bin', 'ffprobe.exe'),
+  ], ['/usr/bin/ffprobe', '/usr/local/bin/ffprobe', '/opt/homebrew/bin/ffprobe']);
+  if (!ffprobe && ffmpeg) {
+    const beside = path.join(path.dirname(ffmpeg), isWin ? 'ffprobe.exe' : 'ffprobe');
+    if (fs.existsSync(beside)) ffprobe = beside;
+  }
 
-  return { ffmpeg, sevenZip, sevenZipFull, soffice, pandoc, calibre, magick, browser, ytdlp };
+  return { ffmpeg, ffprobe, sevenZip, sevenZipFull, soffice, pandoc, calibre, magick, browser, ytDlp };
 }
 
 export let tools = findTools();

@@ -9,7 +9,7 @@ import { CATEGORIES, FORMATS, ALIASES } from './formats.js';
 import { initEngines, rescan, allTargets, engineStatus, findRoute, routeSchema, shutdownEngines } from './registry.js';
 import { pdfPageSchema } from './engines/imagepdf.js';
 import * as store from './jobs.js';
-import { startImport, getImport, importJson, cancelImport, sweepImports } from './download.js';
+import { startFetch, getFetch, publicFetch, cancelFetch, sweepFetches, resetFetches } from './fetch.js';
 import { UserError, ensureDir, safeName } from './util.js';
 
 const app = express();
@@ -73,18 +73,22 @@ app.post('/api/uploads', upload.single('file'), wrap(async (req, res) => {
   res.json(store.uploadJson(up));
 }));
 
-app.post('/api/imports', (req, res) => {
-  const imp = startImport({ url: req.body?.url, mode: req.body?.mode, quality: req.body?.quality });
-  res.json(importJson(imp));
+app.post('/api/uploads/url', wrap(async (req, res) => {
+  const job = startFetch(req.body || {});
+  res.status(202).json(publicFetch(job));
+}));
+
+app.get('/api/fetches/:id', (req, res) => {
+  const job = getFetch(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Download not found' });
+  res.json(publicFetch(job));
 });
 
-app.get('/api/imports/:id', (req, res) => {
-  const imp = getImport(req.params.id);
-  if (!imp) return res.status(404).json({ error: 'Import not found' });
-  res.json(importJson(imp));
+app.post('/api/fetches/:id/cancel', (req, res) => {
+  cancelFetch(req.params.id);
+  const job = getFetch(req.params.id);
+  res.json(job ? publicFetch(job) : { ok: true });
 });
-
-app.delete('/api/imports/:id', (req, res) => res.json({ ok: cancelImport(req.params.id) }));
 
 app.get('/api/uploads/:id', (req, res) => {
   const up = store.getUpload(req.params.id);
@@ -219,9 +223,10 @@ app.use((err, req, res, next) => {
 // ---------- start
 async function main() {
   await store.resetStorage();
+  await resetFetches();
   await ensureDir(dirs.profiles);
   const status = await initEngines();
-  const sweep = setInterval(() => { sweepImports(); store.sweep().catch(() => {}); }, 5 * 60 * 1000);
+  const sweep = setInterval(() => { store.sweep().catch(() => {}); sweepFetches(); }, 5 * 60 * 1000);
   sweep.unref();
   const server = app.listen(config.port, config.host, () => {
     const on = Object.entries(status).filter(([, s]) => s.available).map(([id]) => id);

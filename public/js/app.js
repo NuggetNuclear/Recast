@@ -159,6 +159,8 @@ async function setTarget(row, to) {
 
 function removeRow(row) {
   row.abortUpload?.();
+  row.status = 'removed';
+  if (row.fetchId) api.cancelFetch(row.fetchId);
   if (row.job && ACTIVE.includes(row.job.status)) api.cancelJob(row.job.id);
   if (row.job) api.deleteJob(row.job.id);
   if (row.upload && !state.rows.some((r) => r !== row && r.upload?.id === row.upload.id)) api.deleteUpload(row.upload.id);
@@ -216,19 +218,35 @@ function ensurePolling() {
 
 async function poll() {
   const active = state.rows.filter((r) => r.job && ACTIVE.includes(r.job.status));
-  if (!active.length) {
+  const fetching = state.rows.filter((r) => r.status === 'fetching' && r.fetchId);
+  if (!active.length && !fetching.length) {
     clearInterval(state.polling);
     state.polling = null;
     return;
   }
-  let jobs;
-  try { jobs = await api.jobs(active.map((r) => r.job.id)); } catch { return; }
-  const byId = new Map(jobs.map((j) => [j.id, j]));
-  for (const r of active) {
-    const j = byId.get(r.job.id);
-    if (j) applyJob(r, j);
-    else { r.status = 'error'; r.error = 'The server no longer knows this job (was it restarted?)'; r.job = null; renderRow(r); }
+  if (active.length) {
+    let jobs;
+    try { jobs = await api.jobs(active.map((r) => r.job.id)); } catch { jobs = null; }
+    if (jobs) {
+      const byId = new Map(jobs.map((j) => [j.id, j]));
+      for (const r of active) {
+        const j = byId.get(r.job.id);
+        if (j) applyJob(r, j);
+        else { r.status = 'error'; r.error = 'The server no longer knows this job (was it restarted?)'; r.job = null; renderRow(r); }
+      }
+    }
   }
+  await Promise.all(fetching.map(async (r) => {
+    try {
+      applyFetch(r, await api.fetchStatus(r.fetchId));
+    } catch (e) {
+      if (r.status !== 'fetching') return;
+      r.status = 'upload-error';
+      r.error = e.status === 404 ? 'The server no longer knows this download (was it restarted?)' : e.message;
+      r.fetchId = null;
+      renderRow(r);
+    }
+  }));
   renderChrome();
 }
 
@@ -275,6 +293,7 @@ function statusText(row) {
   switch (row.status) {
     case 'waiting': return 'Waiting to upload';
     case 'uploading': return `Uploading ${pct}`;
+    case 'fetching': return row.progress > 0.005 ? `${row.stage || 'Downloading'} · ${pct}` : (row.stage || 'Downloading');
     case 'queued': return row.job?.queuePosition > 1 ? `Queued · #${row.job.queuePosition}` : 'Starting…';
     case 'processing': return row.progress > 0.005 ? `${row.stage || 'Converting'} · ${pct}` : row.stage || 'Converting';
     default: return '';
@@ -283,11 +302,15 @@ function statusText(row) {
 
 function renderRow(row) {
   const cat = row.kind === 'merge' ? 'document' : fmtCat(row.format);
-  const thumb = h('div.thumb', { dataset: { cat } }, row.thumb ? h('img', { src: row.thumb, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(document.createTextNode(row.format || '?')) }) : (row.kind === 'merge' ? icon('layers') : (row.format || '?').slice(0, 5)));
+  const thumb = h('div.thumb', { dataset: { cat } }, row.status === 'fetching'
+    ? icon('link')
+    : row.thumb ? h('img', { src: row.thumb, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(document.createTextNode(row.format || '?')) }) : (row.kind === 'merge' ? icon('layers') : (row.format || '?').slice(0, 5)));
 
-  const meta = row.kind === 'merge'
-    ? [`Merged from ${row.sources.length} files`]
-    : describe(row);
+  const meta = row.status === 'fetching'
+    ? [row.sourceUrl || 'Downloading']
+    : row.kind === 'merge'
+      ? [`Merged from ${row.sources.length} files`]
+      : describe(row);
   const main = h('div.file-main',
     h('div.file-name', { title: row.name }, row.name),
     h('div.file-meta', meta.flatMap((m, i) => (i ? [h('span.sep', '·'), m] : [m]))),
@@ -300,7 +323,7 @@ function renderRow(row) {
     const targets = targetsOf(row.format);
     const tbtn = h('button.target-btn', {
       type: 'button', class: row.target ? '' : 'empty', 'aria-haspopup': 'dialog', 'aria-expanded': 'false',
-      disabled: row.status === 'upload-error' || !targets.length,
+      disabled: row.status === 'upload-error' || row.status === 'fetching' || !targets.length,
       title: row.target ? `${state.meta.formats[row.target]?.name || row.target}` : 'Choose output format',
     }, row.target ? row.target : 'Convert to…', icon('chevronDown'));
     tbtn.addEventListener('click', () => openPicker({ anchor: tbtn, targets, current: row.target, from: row.format, meta: state.meta, onPick: (to) => setTarget(row, to) }));
@@ -316,10 +339,13 @@ function renderRow(row) {
   const removeBtn = h('button.icon-btn.file-remove', { type: 'button', 'aria-label': `Remove ${row.name}`, title: 'Remove', onclick: () => removeRow(row) }, icon('x'));
   let progress = null;
   switch (row.status) {
-    case 'waiting': case 'uploading':
+    case 'waiting': case 'uploading': case 'fetching': {
+      const known = row.status === 'uploading' || row.progress > 0.005;
       status.append(h('span.status-text', statusText(row)));
-      progress = h('div.progress', h('i', { style: { width: `${Math.round(row.progress * 100)}%` } }));
+      if (row.status === 'fetching') status.append(h('button.icon-btn', { type: 'button', title: 'Cancel', 'aria-label': 'Cancel download', onclick: () => cancelFetchRow(row) }, icon('stop')));
+      progress = h('div.progress', { class: known ? '' : 'indeterminate' }, h('i', { style: { width: known ? `${Math.round((row.progress || 0) * 100)}%` : undefined } }));
       break;
+    }
     case 'queued': case 'processing': {
       status.append(h('span.spinner'), h('span.status-text', statusText(row)), h('button.icon-btn', { type: 'button', title: 'Cancel', 'aria-label': 'Cancel conversion', onclick: () => { api.cancelJob(row.job.id); } }, icon('stop')));
       progress = h('div.progress', { class: row.progress > 0.005 ? '' : 'indeterminate' }, h('i', { style: { width: row.progress > 0.005 ? `${Math.round(row.progress * 100)}%` : undefined } }));
@@ -374,7 +400,7 @@ function renderChrome() {
   if (title) title.replaceChildren(...(state.rows.length ? ['Convert files'] : ['Convert any file.', h('br'), h('span.soft', 'Keep every setting.')]));
   const conv = state.rows.filter((r) => r.kind !== 'merge');
   const done = state.rows.filter((r) => r.status === 'done');
-  const pending = conv.filter((r) => !['done', 'queued', 'processing', 'upload-error'].includes(r.status));
+  const pending = conv.filter((r) => !['done', 'queued', 'processing', 'upload-error', 'fetching'].includes(r.status));
   const busy = state.rows.some((r) => ACTIVE.includes(r.status));
   const cb = $('#convertBtn');
   if (cb) {
@@ -408,7 +434,7 @@ function renderShell() {
     h('div.dz-icon', icon('upload')),
     h('div.dz-title', 'Drop files anywhere to start'),
     h('div.dz-actions', fileBtn(), urlBtn()),
-    h('div.dz-hint', `Up to ${formatBytes(state.meta.limits.maxUploadBytes)} per file · `, h('kbd', 'Ctrl'), ' ', h('kbd', 'V'), ' to paste'));
+    h('div.dz-hint', `Up to ${formatBytes(state.meta.limits.maxUploadBytes)} per file · `, h('kbd', 'Ctrl'), ' ', h('kbd', 'V'), ' pastes a file or a link'));
 
   const popular = POPULAR.filter(([a, b]) => targetsOf(a).includes(b)).slice(0, 8);
   const pop = popular.length ? h('div.popular', h('span', 'Popular'), popular.map(([a, b]) => h('button', {
@@ -459,7 +485,7 @@ function landing() {
     ['route', 'Smart chaining', 'When no single engine can do it, Recast chains them — DOCX → HTML → PDF → PNG — and lets you tune each step.'],
     ['shield', 'Private by design', `Nothing leaves this computer. Uploads and results are deleted automatically after ${Math.round(m.limits.retentionMinutes / 60 * 10) / 10} hours.`],
     ['layers', 'Batch, merge & download', 'Convert dozens of files at once, merge PDFs and images into one document, grab everything as a single ZIP.'],
-    ['cpu', `${engines} engines, one interface`, 'FFmpeg, libvips, MuPDF, SheetJS, 7-Zip, a headless browser and more — plus LibreOffice, Pandoc and Calibre when installed.'],
+    ['cpu', `${engines} engines, one interface`, 'FFmpeg, libvips, MuPDF, SheetJS, 7-Zip, a headless browser and more — plus LibreOffice, Pandoc, Calibre and yt-dlp when installed.'],
   ];
   const catCards = m.categories.map((c) => {
     const inputs = Object.keys(m.targets).filter((f) => f !== '*' && m.formats[f]?.category === c.id);
@@ -530,76 +556,166 @@ function openSettings(row) {
   });
 }
 
-function openUrlImport() {
-  const hasYtdlp = !!state.meta.engines.find((e) => e.id === 'ytdlp')?.available;
-  const input = h('input.input', { type: 'url', placeholder: hasYtdlp ? 'https://example.com/file.pdf or a YouTube link' : 'https://example.com/file.pdf', spellcheck: 'false' });
-  const mode = h('select.select', {},
-    h('option', { value: 'auto' }, 'Automatic'),
-    h('option', { value: 'video' }, 'Video'),
-    h('option', { value: 'audio' }, 'Audio only'),
-    h('option', { value: 'file' }, 'File as-is'));
-  const quality = h('select.select', {},
-    h('option', { value: 'best' }, 'Best available'),
-    ...['2160', '1440', '1080', '720', '480', '360'].map((q) => h('option', { value: q }, `Up to ${q}p`)));
-  const qualityField = h('div.field', h('div.field-label', 'Max. resolution'), quality);
-  mode.addEventListener('change', () => { qualityField.hidden = mode.value === 'audio' || mode.value === 'file'; });
-  const status = h('div.import-status', { hidden: true });
-  const go = h('button.btn.btn-primary', { type: 'button' }, 'Import');
-  let importId = null;
-  let closed = false;
-  const m = modal({
-    title: 'Add from URL',
-    subtitle: hasYtdlp
-      ? 'Direct file links, or video/audio pages from YouTube, Vimeo, SoundCloud and 1,800+ other sites (via yt-dlp).'
-      : 'The file is downloaded by the Recast server. Install yt-dlp to also download from YouTube and other video sites.',
-    body: h('form', { onsubmit: (e) => { e.preventDefault(); go.click(); } }, input,
-      hasYtdlp ? h('div.import-opts', h('div.field', h('div.field-label', 'Download as'), mode), qualityField) : null,
-      status),
-    actions: [h('button.btn', { type: 'button', onclick: () => m.close() }, 'Cancel'), go],
-    onClose: () => { closed = true; if (importId) api.cancelImport(importId); },
+const URL_PREFS = [
+  ['auto', 'Auto — file, or best video'],
+  ['best', 'Best video'],
+  ['1080', 'Up to 1080p'],
+  ['720', 'Up to 720p'],
+  ['480', 'Up to 480p'],
+  ['audio', 'Audio only'],
+];
+
+function savedUrlPrefs() {
+  const saved = storage.get('url-import', {});
+  return {
+    preference: URL_PREFS.some(([id]) => id === saved.preference) ? saved.preference : 'auto',
+    playlist: !!saved.playlist,
+    subtitles: !!saved.subtitles,
+  };
+}
+
+function linkLabel(url) {
+  try {
+    const u = new URL(url);
+    const last = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || '');
+    return (last || u.hostname).slice(0, 140);
+  } catch {
+    return String(url || 'Link').slice(0, 140);
+  }
+}
+
+function ytdlpEngine() {
+  return state.meta.engines.find((e) => e.id === 'ytdlp');
+}
+
+function startUrlImport(opts) {
+  const row = newRow({
+    name: linkLabel(opts.url),
+    sourceUrl: opts.url,
+    size: 0,
+    format: '',
+    status: 'fetching',
+    progress: 0,
+    stage: 'Starting',
   });
-  const showStatus = (text, progress) => {
-    status.hidden = false;
-    status.replaceChildren(h('span', text),
-      h('div.import-bar', { class: progress == null ? 'indeterminate' : '' }, h('i', { style: { width: progress == null ? undefined : `${Math.round(progress * 100)}%` } })));
+  state.rows.push(row);
+  if (location.hash.startsWith('#/formats')) location.hash = '#/';
+  if ($('#files')) renderRow(row);
+  else renderShell();
+  renderChrome();
+  api.importUrl(opts).then((job) => {
+    if (row.status !== 'fetching') { api.cancelFetch(job.id); return; }
+    row.fetchId = job.id;
+    applyFetch(row, job);
+    ensurePolling();
+  }).catch((e) => {
+    if (row.status !== 'fetching') return;
+    row.status = 'upload-error';
+    row.error = e.message;
+    renderRow(row);
+    renderChrome();
+  });
+}
+
+function cancelFetchRow(row) {
+  const id = row.fetchId;
+  row.fetchId = null;
+  if (id) api.cancelFetch(id);
+  row.status = 'upload-error';
+  row.error = 'Download cancelled';
+  renderRow(row);
+  renderChrome();
+}
+
+function adoptUploads(row, uploads) {
+  const [first, ...rest] = uploads;
+  if (!first) {
+    row.status = 'upload-error';
+    row.error = 'The download produced no file';
+    renderRow(row);
+    return;
+  }
+  const fill = (target, up) => {
+    target.name = up.name;
+    target.size = up.size;
+    target.format = up.format;
+    target.upload = up;
+    target.status = 'ready';
+    target.progress = 1;
+    target.stage = '';
+    target.fetchId = null;
+    target.sourceUrl = null;
+    target.error = null;
+    if (state.preset && targetsOf(up.format).includes(state.preset)) target.target = state.preset;
   };
-  const reset = () => {
-    importId = null;
-    go.disabled = false;
-    go.replaceChildren('Import');
-    status.hidden = true;
-  };
-  go.addEventListener('click', async () => {
+  fill(row, first);
+  const extras = rest.map((up) => {
+    const extra = newRow({ status: 'ready' });
+    fill(extra, up);
+    return extra;
+  });
+  const idx = state.rows.indexOf(row);
+  if (idx >= 0 && extras.length) state.rows.splice(idx + 1, 0, ...extras);
+  state.preset = null;
+  renderShell();
+  for (const r of [row, ...extras]) if (r.target) loadRoute(r);
+  if (uploads.length > 1) toast(`Added ${uploads.length} files`);
+}
+
+function applyFetch(row, job) {
+  if (row.status !== 'fetching') return;
+  row.progress = job.progress || 0;
+  row.stage = job.stage || 'Downloading';
+  if (job.status === 'done') {
+    adoptUploads(row, job.uploads || []);
+    return;
+  }
+  if (job.status === 'error' || job.status === 'cancelled') {
+    row.fetchId = null;
+    row.status = 'upload-error';
+    row.error = job.status === 'cancelled' ? 'Download cancelled' : (job.error || 'Download failed');
+    row.details = job.details || null;
+    renderRow(row);
+    renderChrome();
+    return;
+  }
+  patch(row);
+}
+
+function openUrlImport() {
+  const prefs = savedUrlPrefs();
+  const input = h('input.input', { type: 'url', placeholder: 'https://… or a YouTube link', spellcheck: 'false' });
+  const preference = h('select.select', URL_PREFS.map(([id, label]) => h('option', { value: id, selected: id === prefs.preference }, label)));
+  const playlistBox = h('input', { type: 'checkbox' });
+  playlistBox.checked = prefs.playlist;
+  const subsBox = h('input', { type: 'checkbox' });
+  subsBox.checked = prefs.subtitles;
+  const toggle = (box, label, help) => h('div.field.field-toggle.full',
+    h('div.txt', h('span.field-label', label), h('div.field-help', help)),
+    h('label.switch', box, h('span')));
+  const ytdlp = ytdlpEngine();
+  const note = ytdlp && !ytdlp.available
+    ? h('div.field-note', icon('info'), h('span', 'yt-dlp is not installed, so only a direct file link works. Install it from Engines to download YouTube and other sites.'))
+    : null;
+  const go = h('button.btn.btn-primary', { type: 'button' }, 'Import');
+  const m = modal({
+    title: 'Add from a link',
+    subtitle: 'A file link is saved as-is. A page, including YouTube, is downloaded with yt-dlp on this computer.',
+    body: h('form.url-form', { onsubmit: (e) => { e.preventDefault(); go.click(); } },
+      input,
+      h('div.field', h('div.field-label', h('span', 'Save as')), preference, h('div.field-help', 'Auto keeps a direct file and downloads the best video from a page.')),
+      toggle(playlistBox, 'Playlist', `Import every item, up to 25.`),
+      toggle(subsBox, 'Subtitles', 'English subtitles, when the site has them, are added as separate files.'),
+      note),
+    actions: [h('button.btn', { type: 'button', onclick: () => m.close() }, 'Cancel'), go],
+  });
+  go.addEventListener('click', () => {
     const url = input.value.trim();
     if (!url) return input.focus();
-    go.disabled = true;
-    go.replaceChildren(h('span.spinner', { style: { borderTopColor: 'currentColor' } }), 'Downloading…');
-    showStatus('Connecting…', null);
-    try {
-      let imp = await api.startImport(url, hasYtdlp ? mode.value : 'file', quality.value);
-      importId = imp.id;
-      while (imp.status === 'running') {
-        await new Promise((r) => setTimeout(r, 700));
-        if (closed) return;
-        imp = await api.importStatus(importId);
-        const pct = imp.progress != null && imp.progress > 0 ? ` ${Math.round(imp.progress * 100)}%` : '';
-        showStatus(`${imp.stage || 'Downloading…'}${pct}`, imp.progress);
-      }
-      importId = null;
-      if (closed) return;
-      if (imp.status === 'error') { const err = new Error(imp.error); err.details = imp.details; throw err; }
-      const up = imp.upload;
-      const row = newRow({ name: up.name, size: up.size, format: up.format, upload: up, status: 'ready' });
-      if (state.preset && targetsOf(up.format).includes(state.preset)) row.target = state.preset;
-      state.rows.push(row);
-      m.close();
-      renderShell();
-      if (row.target) loadRoute(row);
-    } catch (e) {
-      if (closed) return;
-      toast(e.message, { type: 'error' });
-      reset();
-    }
+    const opts = { url, preference: preference.value, playlist: playlistBox.checked, subtitles: subsBox.checked };
+    storage.set('url-import', { preference: opts.preference, playlist: opts.playlist, subtitles: opts.subtitles });
+    startUrlImport(opts);
+    m.close();
   });
 }
 
@@ -714,14 +830,28 @@ function setupGlobalDrop() {
   });
 }
 
+function pastedLinks(text) {
+  const parts = String(text || '').trim().split(/[\s\n]+/).filter(Boolean);
+  if (!parts.length || parts.length > 10) return null;
+  if (!parts.every((p) => /^https?:\/\/\S+$/i.test(p))) return null;
+  return parts;
+}
+
 function setupPaste() {
   document.addEventListener('paste', (e) => {
     if (e.target.closest('input, textarea')) return;
     const files = [...(e.clipboardData?.files || [])];
-    if (!files.length) return;
+    if (files.length) {
+      e.preventDefault();
+      if (location.hash.startsWith('#/formats')) location.hash = '#/';
+      addFiles(files.map((f, i) => (f.name && f.name !== 'image.png' ? f : new File([f], `pasted-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}${i ? `-${i}` : ''}.${(f.type.split('/')[1] || 'bin').replace('jpeg', 'jpg').replace('svg+xml', 'svg')}`, { type: f.type }))));
+      return;
+    }
+    const links = pastedLinks(e.clipboardData?.getData('text/plain'));
+    if (!links) return;
     e.preventDefault();
-    if (location.hash.startsWith('#/formats')) location.hash = '#/';
-    addFiles(files.map((f, i) => (f.name && f.name !== 'image.png' ? f : new File([f], `pasted-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}${i ? `-${i}` : ''}.${(f.type.split('/')[1] || 'bin').replace('jpeg', 'jpg').replace('svg+xml', 'svg')}`, { type: f.type }))));
+    const prefs = savedUrlPrefs();
+    for (const url of links) startUrlImport({ url, ...prefs });
   });
 }
 
@@ -777,7 +907,7 @@ async function boot() {
   setupPaste();
   window.addEventListener('hashchange', route);
   window.addEventListener('beforeunload', (e) => {
-    if (state.rows.some((r) => ['uploading', 'queued', 'processing'].includes(r.status))) e.preventDefault();
+    if (state.rows.some((r) => ['uploading', 'fetching', 'queued', 'processing'].includes(r.status))) e.preventDefault();
   });
   route();
 }
