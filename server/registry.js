@@ -50,6 +50,7 @@ let wildcard = [];
 let routeCache = new Map();
 
 export async function initEngines() {
+  validateAllEngineSchemas();
   const results = await Promise.all(ENGINES.map(async (e) => {
     try {
       return [e.id, { available: false, ...(await e.detect()) }];
@@ -194,12 +195,47 @@ export async function shutdownEngines() {
   await Promise.all(ENGINES.map((e) => e.shutdown?.().catch(() => {})));
 }
 
-export function validateStepOptions(rawOptions, groups) {
+export const KNOWN_FIELD_TYPES = new Set(['select', 'number', 'range', 'toggle', 'text', 'textarea', 'color', 'time', 'multi', 'note']);
+
+export function validateEngineSchemaFields(engineId, groups) {
+  for (const g of (groups || [])) {
+    for (const fl of (g.fields || [])) {
+      if (!fl) continue;
+      if (!KNOWN_FIELD_TYPES.has(fl.type)) {
+        throw new Error(`Unknown field type "${fl.type}" in engine "${engineId}"`);
+      }
+    }
+  }
+}
+
+export function validateAllEngineSchemas() {
+  for (const e of ENGINES) {
+    if (typeof e.schema === 'function') {
+      if (typeof e.routes === 'function') {
+        for (const r of e.routes()) {
+          const froms = Array.isArray(r.from) ? r.from : [r.from];
+          const tos = Array.isArray(r.to) ? r.to : [r.to];
+          const groups = e.schema({ from: froms[0] === '*' ? 'png' : froms[0], to: tos[0] === '*' ? 'pdf' : tos[0], info: {} });
+          validateEngineSchemaFields(e.id, groups);
+        }
+      } else {
+        const groups = e.schema({ from: '', to: '', info: {} });
+        validateEngineSchemaFields(e.id, groups);
+      }
+    }
+  }
+}
+
+export function validateStepOptions(rawOptions, groups, engineId) {
   if (!rawOptions || typeof rawOptions !== 'object') return {};
   const fieldMap = new Map();
   for (const g of (groups || [])) {
     for (const fl of (g.fields || [])) {
-      if (fl?.key && fl.type !== 'note') {
+      if (!fl) continue;
+      if (!KNOWN_FIELD_TYPES.has(fl.type)) {
+        throw new Error(`Unknown field type "${fl.type}" in engine "${engineId || g.id || 'unknown'}"`);
+      }
+      if (fl.key && fl.type !== 'note') {
         fieldMap.set(fl.key, fl);
       }
     }
@@ -211,20 +247,19 @@ export function validateStepOptions(rawOptions, groups) {
     if (!field) continue;
     if (val === undefined || val === null || val === '') {
       if (field.type === 'select') {
-        const allowed = field.options.map((o) => String(o.value));
-        if (allowed.includes('')) validated[key] = '';
+        const matched = field.options.find((o) => o.value === '' || o.value === null || o.value === undefined);
+        if (matched) validated[key] = matched.value;
       }
       continue;
     }
 
     switch (field.type) {
       case 'select': {
-        const strVal = String(val);
-        const allowed = field.options.map((o) => String(o.value));
-        if (!allowed.includes(strVal)) {
+        const matched = field.options.find((o) => o.value === val || String(o.value) === String(val));
+        if (!matched) {
           throw new UserError(`Invalid choice for ${field.key}: "${val}"`);
         }
-        validated[key] = strVal;
+        validated[key] = matched.value;
         break;
       }
       case 'number':
@@ -263,17 +298,19 @@ export function validateStepOptions(rawOptions, groups) {
         if (!Array.isArray(val)) {
           throw new UserError(`Invalid array for ${field.key}`);
         }
-        const allowed = new Set(field.options.map((o) => String(o.value)));
+        const result = [];
         for (const item of val) {
-          if (!allowed.has(String(item))) {
+          const matched = field.options.find((o) => o.value === item || String(o.value) === String(item));
+          if (!matched) {
             throw new UserError(`Invalid choice for ${field.key}: "${item}"`);
           }
+          result.push(matched.value);
         }
-        validated[key] = val.map(String);
+        validated[key] = result;
         break;
       }
       default:
-        break;
+        throw new Error(`Unknown field type "${field.type}" in engine "${engineId || 'unknown'}"`);
     }
   }
   return validated;
@@ -284,6 +321,6 @@ export function validateJobOptions(route, options, info) {
   const optsArray = Array.isArray(options) ? options : [options || {}];
   return schemas.map((stepSchema, i) => {
     const raw = optsArray[i] || {};
-    return validateStepOptions(raw, stepSchema.groups);
+    return validateStepOptions(raw, stepSchema.groups, route.steps?.[i]?.engine);
   });
 }

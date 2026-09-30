@@ -6,7 +6,9 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fetch } from 'undici';
 import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
-import { getEngine, validateStepOptions } from '../server/registry.js';
+import { getEngine, validateStepOptions, validateEngineSchemaFields } from '../server/registry.js';
+import { pdfPageSchema } from '../server/engines/imagepdf.js';
+import { startFetch } from '../server/fetch.js';
 import { verifyHostAndAuth } from '../server/index.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
@@ -153,6 +155,42 @@ test('engine option schemas are enforced server-side', () => {
   assert.throws(
     () => validateStepOptions({ volume: 100 }, mediaSchema),
     /must be at most/
+  );
+
+  // 5. Select and multi return matched option's original value (keeping numbers as numbers)
+  const numericSelectGroup = [{
+    id: 'test',
+    fields: [
+      { type: 'select', key: 'level', options: [{ value: 0, label: 'Zero' }, { value: 1, label: 'One' }, { value: 2, label: 'Two' }] },
+      { type: 'multi', key: 'modes', options: [{ value: 10, label: 'Ten' }, { value: 20, label: 'Twenty' }] },
+    ],
+  }];
+  const keptNumbers = validateStepOptions({ level: '1', modes: ['10', 20] }, numericSelectGroup);
+  assert.equal(keptNumbers.level, 1);
+  assert.equal(typeof keptNumbers.level, 'number');
+  assert.deepEqual(keptNumbers.modes, [10, 20]);
+  assert.equal(typeof keptNumbers.modes[0], 'number');
+
+  // 6. Unknown field type throws at startup naming engine and field type
+  assert.throws(
+    () => validateEngineSchemaFields('dummyEngine', [{ fields: [{ type: 'fancy_slider', key: 'slider' }] }]),
+    /Unknown field type "fancy_slider" in engine "dummyEngine"/
+  );
+
+  // 7. /api/merge options are validated
+  const mergeSchema = pdfPageSchema({ multi: true });
+  assert.throws(
+    () => validateStepOptions({ pageSize: 'hacked_paper' }, mergeSchema),
+    /Invalid choice for pageSize/
+  );
+  const validMerge = validateStepOptions({ margin: 5, background: '#000000' }, mergeSchema);
+  assert.equal(validMerge.margin, 5);
+  assert.equal(validMerge.background, '#000000');
+
+  // 8. /api/uploads/url preference parameter is validated
+  assert.throws(
+    () => startFetch({ url: 'https://example.com/video.mp4', preference: '--exec=id' }),
+    /Invalid preference/
   );
 });
 

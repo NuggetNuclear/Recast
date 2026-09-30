@@ -506,7 +506,13 @@ async function execute(job, opts) {
 
 export function startFetch(body = {}) {
   const url = parseHttpUrl(body?.url);
-  const preference = PREFERENCES.has(body?.preference) ? body.preference : 'auto';
+  let preference = 'auto';
+  if (body?.preference !== undefined && body?.preference !== null && body?.preference !== '') {
+    if (!PREFERENCES.has(body.preference)) {
+      throw new UserError(`Invalid preference: "${body.preference}". Allowed choices: ${Array.from(PREFERENCES).join(', ')}`);
+    }
+    preference = body.preference;
+  }
   const playlist = body?.playlist === true;
   const subtitles = body?.subtitles === true;
   if (preference !== 'auto' && !tools.ytDlp) {
