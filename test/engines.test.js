@@ -9,8 +9,8 @@ const minNode = (range) => {
   return m ? [Number(m[1]), Number(m[2] || 0), Number(m[3] || 0)] : null;
 };
 
-// undici 8 needs Node >= 22.19 and fails to even import on Node 20 (webidl.util.markAsUncloneable),
-// while the project declares (and the README promises) Node 20.
+// A dependency whose engines field asks for a newer Node than package.json declares would break
+// `npm start` on the oldest supported Node (undici 8 did exactly that while Recast declared Node 20).
 test('undici, used by the URL importer, supports the Node version range Recast declares', () => {
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const undici = require('undici/package.json');

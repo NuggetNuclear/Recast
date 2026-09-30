@@ -13,6 +13,10 @@ npm start
 
 Then open <http://localhost:3000>. Use `npm run dev` to auto-restart the server while editing `server/`.
 
+### Developing in WSL
+
+On a Windows machine the development environment is WSL, not Windows. Run `npm` with a Linux Node inside WSL (for example `nvm install`, which reads `.nvmrc`). If `which npm` prints a path under `/mnt/c/`, you are running the Windows npm from inside WSL, which installs Windows binaries (sharp, ffmpeg-static, 7zip-bin) into `node_modules`. Docker also runs inside WSL, so `docker compose run --rm recast npm test` is the reference way to run the whole suite with every engine installed.
+
 ### With Docker (everything included)
 
 ```bash
@@ -23,7 +27,7 @@ Then open <http://localhost:3000>. The image bundles every engine — FFmpeg and
 
 ### Without Docker
 
-Requires Node.js 20+. FFmpeg, libvips, MuPDF and 7-Zip ship with the npm dependencies. PDF rendering of HTML/Markdown uses the Edge or Chrome already installed on the machine. YouTube links need yt-dlp and, for yt-dlp's JavaScript solver, Node.js 22 or newer.
+Requires Node.js 26 or newer (`.nvmrc` pins it; the Docker image uses `node:26`). FFmpeg, libvips, MuPDF and 7-Zip ship with the npm dependencies. PDF rendering of HTML/Markdown uses the Edge or Chrome already installed on the machine. YouTube links need yt-dlp; Recast points its JavaScript solver at the Node.js that runs the server.
 
 ## Documentation
 

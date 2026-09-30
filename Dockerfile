@@ -1,6 +1,6 @@
 # Recast with every engine: FFmpeg (with ffprobe), libvips, MuPDF, 7-Zip (with RAR), Chromium,
 # LibreOffice, Pandoc, Calibre, ImageMagick 7 and yt-dlp.
-FROM node:24-trixie-slim
+FROM node:26-trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 # contrib/non-free for the RAR codec of 7-Zip.
