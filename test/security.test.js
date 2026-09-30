@@ -5,6 +5,7 @@ import http from 'node:http';
 import { fetch } from 'undici';
 import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
 import { getEngine, validateStepOptions } from '../server/registry.js';
+import { verifyHostAndAuth } from '../server/index.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
   const privateIps = [
@@ -151,5 +152,40 @@ test('engine option schemas are enforced server-side', () => {
     () => validateStepOptions({ volume: 100 }, mediaSchema),
     /must be at most/
   );
+});
+
+test('startup validation refuses non-loopback hosts without auth and partial credentials', () => {
+  // 1. Refuses non-loopback host with no creds
+  assert.throws(
+    () => verifyHostAndAuth('0.0.0.0', '', ''),
+    /Refusing to bind non-loopback host/
+  );
+  assert.throws(
+    () => verifyHostAndAuth('192.168.1.100', '', ''),
+    /Refusing to bind non-loopback host/
+  );
+
+  // 2. Refuses with only one credential set
+  assert.throws(
+    () => verifyHostAndAuth('127.0.0.1', 'user', ''),
+    /Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set/
+  );
+  assert.throws(
+    () => verifyHostAndAuth('127.0.0.1', '', 'pass'),
+    /Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set/
+  );
+  assert.throws(
+    () => verifyHostAndAuth('0.0.0.0', 'user', ''),
+    /Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set/
+  );
+
+  // 3. Starts on loopback with no creds
+  assert.doesNotThrow(() => verifyHostAndAuth('127.0.0.1', '', ''));
+  assert.doesNotThrow(() => verifyHostAndAuth('localhost', '', ''));
+  assert.doesNotThrow(() => verifyHostAndAuth('::1', '', ''));
+
+  // 4. Starts on non-loopback with both creds
+  assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', 'user', 'pass'));
+  assert.doesNotThrow(() => verifyHostAndAuth('192.168.1.100', 'user', 'pass'));
 });
 

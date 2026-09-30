@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import multer from 'multer';
 import { ZipArchive } from 'archiver';
@@ -11,15 +12,21 @@ import { pdfPageSchema } from './engines/imagepdf.js';
 import * as store from './jobs.js';
 import { startFetch, getFetch, publicFetch, cancelFetch, sweepFetches, resetFetches } from './fetch.js';
 import { UserError, ensureDir, safeName } from './util.js';
-import { assertId, assertIndex, basicAuthValid } from './security.js';
+import { assertId, assertIndex, basicAuthValid, verifyHostAndAuth } from './security.js';
+
+export { verifyHostAndAuth };
 
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
 app.use((req, res, next) => {
-  if (!config.authUser || !config.authPassword || basicAuthValid(req.get('authorization'), config.authUser, config.authPassword)) return next();
-  res.set('WWW-Authenticate', 'Basic realm="Recast"');
-  return res.status(401).json({ error: 'Authentication required' });
+  if (config.authUser && config.authPassword) {
+    if (!basicAuthValid(req.get('authorization'), config.authUser, config.authPassword)) {
+      res.set('WWW-Authenticate', 'Basic realm="Recast"');
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+  }
+  return next();
 });
 
 // ---------- static assets
@@ -274,6 +281,7 @@ app.use((err, req, res, next) => {
 
 // ---------- start
 async function main() {
+  verifyHostAndAuth(config.host, config.authUser, config.authPassword);
   await store.resetStorage();
   await resetFetches();
   await ensureDir(dirs.profiles);
@@ -299,7 +307,10 @@ async function main() {
   process.on('SIGTERM', stop);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const isMain = Boolean(process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url));
+if (isMain) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

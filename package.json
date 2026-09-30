@@ -8,7 +8,6 @@
   "scripts": {
     "start": "node --no-experimental-webstorage server/index.js",
     "dev": "node --no-experimental-webstorage --watch-path=server server/index.js",
-    "proxy": "node server/dev-proxy.js",
     "test": "node --test"
   },
   "engines": {

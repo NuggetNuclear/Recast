@@ -93,8 +93,10 @@ Tools are found on `PATH` or in their default install folders; you can also poin
 | `YTDLP_PATH` | | Path to the yt-dlp binary, if it is not on `PATH` |
 | `YTDLP_COOKIES` | | `cookies.txt` exported from your browser, for sites that require a sign-in |
 | `MAX_IMAGE_PIXELS` | `100000000` | Maximum decoded image pixels per input |
-| `RECAST_AUTH_USER` | | Optional Basic Auth username for the app and proxy |
-| `RECAST_AUTH_PASSWORD` | | Optional Basic Auth password; set together with the username |
+| `RECAST_AUTH_USER` | | Basic Auth username (required when `HOST` is not loopback) |
+| `RECAST_AUTH_PASSWORD` | | Basic Auth password; set together with the username |
+
+To access Recast from other devices on your local network (LAN), set `HOST=0.0.0.0` and configure both `RECAST_AUTH_USER` and `RECAST_AUTH_PASSWORD`. Recast refuses to bind to non-loopback interfaces without credentials.
 
 The data directory is wiped when the server starts.
 

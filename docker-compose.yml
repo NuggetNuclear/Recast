@@ -5,9 +5,12 @@ services:
     container_name: recast
     restart: unless-stopped
     ports:
-      - "3300:3000"
+      - "${RECAST_PORT:-3000}:3000"
     command: ["node", "--no-experimental-webstorage", "--watch-path=server", "server/index.js"]
     environment:
+      HOST: 0.0.0.0
+      RECAST_AUTH_USER: ${RECAST_AUTH_USER:-admin}
+      RECAST_AUTH_PASSWORD: ${RECAST_AUTH_PASSWORD:-recast}
       RETENTION_MINUTES: ${RETENTION_MINUTES:-120}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-8192}
       JOB_TIMEOUT_MIN: ${JOB_TIMEOUT_MIN:-180}

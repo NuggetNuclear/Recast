@@ -81,5 +81,7 @@ Instala cualquiera de estos y haz clic en **Motores → Reescanear** (o reinicia
 | `YTDLP_PATH` | | Ruta al ejecutable yt-dlp si no está en `PATH` |
 | `YTDLP_COOKIES` | | Archivo `cookies.txt` exportado para sitios con inicio de sesión |
 | `MAX_IMAGE_PIXELS` | `100000000` | Máximo de píxeles de imagen decodificados por archivo |
-| `RECAST_AUTH_USER` | | Usuario opcional de Basic Auth para la aplicación y el proxy |
-| `RECAST_AUTH_PASSWORD` | | Contraseña opcional de Basic Auth; úsala junto al usuario |
+| `RECAST_AUTH_USER` | | Usuario de Basic Auth (requerido si `HOST` no es loopback) |
+| `RECAST_AUTH_PASSWORD` | | Contraseña de Basic Auth; úsala junto al usuario |
+
+Para acceder a Recast desde otros dispositivos en tu red local (LAN), establece `HOST=0.0.0.0` y define tanto `RECAST_AUTH_USER` como `RECAST_AUTH_PASSWORD`. Recast rechazará iniciar en interfaces externas sin autenticación.
