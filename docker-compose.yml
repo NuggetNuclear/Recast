@@ -5,7 +5,7 @@ services:
     container_name: recast
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${RECAST_PORT:-3000}:3000"
     command: ["node", "--no-experimental-webstorage", "--watch-path=server", "server/index.js"]
     environment:
       HOST: 0.0.0.0
