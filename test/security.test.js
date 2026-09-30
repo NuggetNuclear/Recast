@@ -11,11 +11,11 @@ import fsp from 'node:fs/promises';
 import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
 import { getEngine, validateStepOptions, validateEngineSchemaFields } from '../server/registry.js';
 import { pdfPageSchema } from '../server/engines/imagepdf.js';
-import { startFetch } from '../server/fetch.js';
+import { startFetch, fetchSafely } from '../server/fetch.js';
 import { app, verifyHostAndAuth } from '../server/index.js';
 import * as store from '../server/jobs.js';
 import { run, killAllChildren } from '../server/util.js';
-import { dirs } from '../server/config.js';
+import { config, dirs } from '../server/config.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
   const privateIps = [
@@ -105,9 +105,10 @@ test('safeAgent blocks DNS rebinding at connect time', async () => {
     cb(null, [{ address: '127.0.0.1', family: 4 }]);
   };
   try {
+    // A refused connection (ECONNREFUSED) would also say 'fetch failed', so check that the guard itself refused.
     await assert.rejects(
       fetch('http://rebind-attack.test', { dispatcher: safeAgent }),
-      /fetch failed/
+      (err) => err.cause?.message === 'Local network URLs are not allowed'
     );
   } finally {
     nodeDns.lookup = originalLookup;
@@ -120,19 +121,15 @@ test('redirect whose Location points at a private IP is rejected', async () => {
     res.end();
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const port = server.address().port;
+  const { port } = server.address();
+  // The test server itself is on loopback, so let only its own origin through the guard.
+  const assertUrl = async (u) => (new URL(u).port === String(port) ? new URL(u) : assertSafeUrl(u));
 
   try {
-    let current = new URL(`http://127.0.0.1:${port}/redirect`);
-    await assert.rejects(async () => {
-      for (let i = 0; i <= 5; i++) {
-        const r = await fetch(current, { redirect: 'manual', dispatcher: safeAgent });
-        if ([301, 302, 303, 307, 308].includes(r.status)) {
-          const loc = r.headers.get('location');
-          current = await assertSafeUrl(new URL(loc, current));
-        }
-      }
-    }, /Local network URLs are not allowed/);
+    await assert.rejects(
+      fetchSafely(new URL(`http://127.0.0.1:${port}/redirect`), {}, { assertUrl }),
+      /Local network URLs are not allowed/
+    );
   } finally {
     server.close();
   }
@@ -362,14 +359,31 @@ test('run() terminates child process tree on abort and timeout', async () => {
 
   // 3. Process tree with nested child process terminates promptly
   const controllerTree = new AbortController();
-  const nestedScript = 'const { spawn } = require("child_process"); spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"]); setInterval(() => {}, 1000);';
+  const pidFile = path.join(os.tmpdir(), `recast-tree-${process.pid}.pid`);
+  await fsp.rm(pidFile, { force: true });
+  const grand = `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`;
+  const nestedScript = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grand)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`;
   const startTree = Date.now();
   const pTree = run(process.execPath, ['-e', nestedScript], {
     signal: controllerTree.signal,
   });
-  setTimeout(() => controllerTree.abort(), 150);
-  await assert.rejects(pTree, /Cancelled/);
-  assert.ok(Date.now() - startTree < 4000, 'Nested process tree was not terminated promptly on abort');
+  let grandPid = 0;
+  for (let i = 0; i < 100 && !grandPid; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    grandPid = Number(await fsp.readFile(pidFile, 'utf8').catch(() => 0));
+  }
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  try {
+    assert.ok(grandPid && alive(grandPid), 'grandchild should be running before the abort');
+    controllerTree.abort();
+    await assert.rejects(pTree, /Cancelled/);
+    assert.ok(Date.now() - startTree < 8000, 'Nested process tree was not terminated promptly on abort');
+    for (let i = 0; i < 50 && alive(grandPid); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(alive(grandPid), false, 'the grandchild must die with its parent');
+  } finally {
+    if (alive(grandPid)) process.kill(grandPid, 'SIGKILL');
+    await fsp.rm(pidFile, { force: true });
+  }
 });
 
 
@@ -438,5 +452,32 @@ test('docker healthcheck script authenticates against a password-protected serve
   } finally {
     server.kill();
     await fsp.rm(dataDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test('with credentials configured, every route including health and static files answers 401 without them', async () => {
+  const previous = { user: config.authUser, password: config.authPassword };
+  config.authUser = 'alice';
+  config.authPassword = 'secret';
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const good = { authorization: `Basic ${Buffer.from('alice:secret').toString('base64')}` };
+  const bad = { authorization: `Basic ${Buffer.from('alice:wrong').toString('base64')}` };
+  try {
+    for (const url of ['/api/health', '/api/meta', '/', '/js/app.js', '/api/jobs/events']) {
+      const none = await fetch(base + url);
+      assert.equal(none.status, 401, `${url} without credentials`);
+      assert.match(none.headers.get('www-authenticate') || '', /^Basic/);
+      assert.equal((await fetch(base + url, { headers: bad })).status, 401, `${url} with wrong credentials`);
+    }
+    for (const url of ['/api/health', '/', '/js/app.js']) {
+      assert.equal((await fetch(base + url, { headers: good })).status, 200, `${url} with credentials`);
+    }
+  } finally {
+    config.authUser = previous.user;
+    config.authPassword = previous.password;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
   }
 });

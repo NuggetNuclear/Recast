@@ -291,7 +291,7 @@ function filenameFrom(url, headers, type) {
 const REDIRECT_STATUS = [301, 302, 303, 307, 308];
 
 /** GET with redirects followed by hand, so every hop is checked against the local-network guard. */
-async function fetchSafely(url, init, { assertUrl = assertSafeUrl } = {}) {
+export async function fetchSafely(url, init, { assertUrl = assertSafeUrl } = {}) {
   let current = await assertUrl(url);
   let r;
   for (let hops = 0; hops <= 5; hops++) {
