@@ -126,6 +126,13 @@ function schema({ from, to }) {
   ];
 }
 
+/** The page may load its own file and what sits next to it. Windows paths compare without regard to case. */
+export function isAllowedFile(candidate, input, root) {
+  const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+  const local = norm(candidate);
+  return local === norm(input) || local.startsWith(`${norm(root)}${path.sep}`);
+}
+
 async function convert({ input, from, to, o, outDir, baseName, signal, progress }) {
   active++;
   clearTimeout(idleTimer);
@@ -142,8 +149,7 @@ async function convert({ input, from, to, o, outDir, baseName, signal, progress 
       const target = request.url();
       if (!target.startsWith('file://')) return request.abort();
       try {
-        const local = path.resolve(fileURLToPath(target));
-        return local === path.resolve(input) || local.startsWith(`${path.resolve(root)}${path.sep}`) ? request.continue() : request.abort();
+        return isAllowedFile(fileURLToPath(target), input, root) ? request.continue() : request.abort();
       } catch { return request.abort(); }
     });
     await page.setJavaScriptEnabled(opt.bool(o.javascript, true));

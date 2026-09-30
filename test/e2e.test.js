@@ -23,7 +23,7 @@ import archive, { assertSafeExtractedDir } from '../server/engines/archive.js';
 import trace from '../server/engines/trace.js';
 import font from '../server/engines/font.js';
 import sheet from '../server/engines/sheet.js';
-import browser from '../server/engines/browser.js';
+import browser, { isAllowedFile } from '../server/engines/browser.js';
 
 const XLSX = createRequire(import.meta.url)('xlsx');
 
@@ -312,3 +312,14 @@ test('extracting an archive that contains a symlink is rejected', { skip: !tools
     process.platform === 'win32' ? /symbolic link|could not process/i : /symbolic link/i
   );
 }));
+
+test('the browser sandbox only allows the input file and its directory, ignoring case on Windows', () => {
+  const dir = path.resolve('uploads', 'abc');
+  const input = path.join(dir, 'Page.html');
+  assert.equal(isAllowedFile(input, input, dir), true);
+  assert.equal(isAllowedFile(path.join(dir, 'img', 'a.png'), input, dir), true);
+  assert.equal(isAllowedFile(path.resolve('uploads', 'abc-other', 'a.png'), input, dir), false);
+  assert.equal(isAllowedFile(path.resolve('uploads', 'secret.txt'), input, dir), false);
+  const shouted = dir.toUpperCase();
+  assert.equal(isAllowedFile(path.join(shouted, 'IMG', 'A.PNG'), input, dir), process.platform === 'win32');
+});
