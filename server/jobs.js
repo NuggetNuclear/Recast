@@ -71,7 +71,7 @@ export function createJob({ uploadId, to, options }) {
   if (!up) throw new UserError('The uploaded file has expired — please add it again');
   const route = findRoute(up.format, to);
   if (!route) throw new UserError(`Converting ${up.format ? up.format.toUpperCase() : 'this file'} to ${to.toUpperCase()} is not supported`);
-  const job = newJob({ kind: 'convert', uploadId, to, steps: route.steps, options: Array.isArray(options) ? options : [options || {}] });
+  const job = newJob({ kind: 'convert', uploadId, to, steps: route.steps, renameTo: route.renameTo || null, options: Array.isArray(options) ? options : [options || {}] });
   enqueue(job);
   return job;
 }
@@ -198,6 +198,16 @@ async function runConvert(job, jobDir, signal) {
     if (!produced.length) throw new UserError('The conversion produced no output');
     files = produced;
     job.progress = Math.max(job.progress, (i + 1) / n * 0.99);
+  }
+  if (job.renameTo) {
+    const ext = `.${job.steps[n - 1].to}`;
+    files = await Promise.all(files.map(async (f) => {
+      if (!f.name.toLowerCase().endsWith(ext)) return f;
+      const name = f.name.slice(0, -ext.length) + `.${job.renameTo}`;
+      const dest = path.join(path.dirname(f.path), name);
+      await fsp.rename(f.path, dest);
+      return { path: dest, name };
+    }));
   }
   job.outputs = await Promise.all(files.map(async (f) => ({ name: f.name, path: f.path, size: await fileSize(f.path) })));
 }

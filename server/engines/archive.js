@@ -5,8 +5,8 @@ import { f, group } from '../schema.js';
 import { tools, versionOf } from '../tools.js';
 import { run, UserError, opt, clamp, ensureDir } from '../util.js';
 
-const ARCHIVE_IN_BASE = ['zip', '7z', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz', 'gz', 'bz2', 'xz', 'iso', 'cab', 'wim', 'lzh', 'arj', 'cpio', 'rpm', 'deb', 'jar', 'apk', 'z', 'cbz'];
-const ARCHIVE_IN_FULL = ['rar', 'cbr', 'zst'];
+const ARCHIVE_IN_BASE = ['zip', '7z', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz', 'gz', 'bz2', 'xz', 'iso', 'cab', 'wim', 'lzh', 'arj', 'cpio', 'rpm', 'deb', 'jar', 'apk', 'z', 'cbz', 'lzma'];
+const ARCHIVE_IN_FULL = ['rar', 'cbr', 'zst', 'lz', 'dmg', 'vhd', 'vhdx', 'vmdk', 'msi', 'xar', 'squashfs'];
 const PACK_OUT = ['zip', '7z', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz'];
 const SINGLE_OUT = ['gz', 'bz2', 'xz'];
 

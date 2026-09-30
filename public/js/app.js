@@ -457,7 +457,7 @@ function renderShell() {
   const hero = h('section.hero',
     h('span.eyebrow', h('span.dot'), 'Private · runs on your own machine'),
     h('h1#heroTitle'),
-    h('p.lede', `${Object.keys(state.meta.targets).length - 1}+ input formats across images, video, audio, documents, ebooks, spreadsheets, data, archives, fonts and subtitles — with fine control over codecs, quality, size, pages and more.`),
+    h('p.lede', `${Object.keys(state.meta.targets).length - 1}+ input formats across images, video, audio, documents, ebooks, spreadsheets, data, archives, fonts, subtitles and 3D models — with fine control over codecs, quality, size, pages and more.`),
     dz, pop);
 
   const panel = h('section.panel.list-panel', { hidden: !state.rows.length },
@@ -486,12 +486,12 @@ function landing() {
   const m = state.meta;
   const engines = m.engines.filter((e) => e.available).length;
   const features = [
-    ['grid', 'Every format that matters', 'Photos incl. HEIC and PSD, video, audio, PDF, Word, Markdown, spreadsheets, JSON/YAML/XML, archives, fonts and subtitles.'],
+    ['grid', 'Every format that matters', 'Photos incl. HEIC and PSD, video, audio, PDF, Word, Markdown, spreadsheets, JSON/YAML/XML, archives, fonts, subtitles and 3D models.'],
     ['sliders', 'Every setting exposed', 'Codecs, CRF, bitrate, target size, resolution, frame rate, trimming, page ranges, compression, encryption, subsetting and more.'],
     ['route', 'Smart chaining', 'When no single engine can do it, Recast chains them — DOCX → HTML → PDF → PNG — and lets you tune each step.'],
     ['shield', 'Private by design', `Nothing leaves this computer. Uploads and results are deleted automatically after ${Math.round(m.limits.retentionMinutes / 60 * 10) / 10} hours.`],
     ['layers', 'Batch, merge & download', 'Convert dozens of files at once, merge PDFs and images into one document, grab everything as a single ZIP.'],
-    ['cpu', `${engines} engines, one interface`, 'FFmpeg, libvips, MuPDF, SheetJS, 7-Zip, a headless browser and more — plus LibreOffice, Pandoc, Calibre and yt-dlp when installed.'],
+    ['cpu', `${engines} engines, one interface`, 'FFmpeg, libvips, MuPDF, SheetJS, 7-Zip, a headless browser and more — plus LibreOffice, Pandoc, Calibre, Assimp and yt-dlp when installed.'],
   ];
   const catCards = m.categories.map((c) => {
     const inputs = Object.keys(m.targets).filter((f) => f !== '*' && m.formats[f]?.category === c.id);

@@ -11,7 +11,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free/' /etc/apt/so
       ffmpeg \
       chromium \
       libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw \
-      pandoc calibre imagemagick 7zip 7zip-rar \
+      pandoc calibre imagemagick 7zip 7zip-rar assimp-utils \
       python3 python3-venv \
       fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-liberation2 fonts-dejavu-core \
       fonts-crosextra-carlito fonts-crosextra-caladea \

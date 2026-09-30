@@ -1,7 +1,7 @@
 // Engine registry and conversion router.
 // Every engine declares direct routes; the router chains them through a few "pivot"
 // formats (png, pdf, html, json) to reach targets no single engine supports.
-import { FORMATS, categoryOf } from './formats.js';
+import { FORMATS, OUTPUT_ALIASES, categoryOf } from './formats.js';
 import { rescanTools } from './tools.js';
 import image from './engines/image.js';
 import media from './engines/media.js';
@@ -19,8 +19,9 @@ import office from './engines/office.js';
 import pandoc from './engines/pandoc.js';
 import ebook from './engines/ebook.js';
 import ytdlp from './engines/ytdlp.js';
+import model from './engines/model.js';
 
-export const ENGINES = [image, media, subtitle, pdf, imagepdf, browser, markup, data, sheet, archive, font, trace, office, pandoc, ebook, ytdlp];
+export const ENGINES = [image, media, subtitle, pdf, imagepdf, browser, markup, data, sheet, archive, font, trace, office, pandoc, ebook, model, ytdlp];
 const byId = Object.fromEntries(ENGINES.map((e) => [e.id, e]));
 
 const HOP_PENALTY = 0.5;
@@ -125,6 +126,10 @@ function routesFrom(src) {
     }
   };
   for (const e of edges(src, true)) walk([e]);
+  for (const [alias, canon] of Object.entries(OUTPUT_ALIASES)) {
+    const r = best.get(canon);
+    if (r && !best.has(alias)) best.set(alias, { cost: r.cost + 0.01, steps: r.steps, renameTo: alias });
+  }
   routeCache.set(src, best);
   return best;
 }

@@ -7,7 +7,7 @@ import { run, UserError, opt, parseTime, clamp, hexToRgb, ensureDir } from '../u
 import { ffmpeg, probe, filterPath, fmtDuration } from './ff.js';
 
 export const VIDEO_IN = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mpeg', 'm4v', '3gp', '3g2', 'ogv', 'ts', 'mts', 'm2ts', 'vob', 'asf', 'f4v', 'mxf', 'rm', 'rmvb', 'divx', 'y4m', 'dv', 'nut', 'ivf', 'h264', 'hevc', 'wtv'];
-export const AUDIO_IN = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'm4b', 'ogg', 'opus', 'wma', 'aiff', 'ac3', 'eac3', 'dts', 'amr', 'mka', 'weba', 'caf', 'au', 'mp2', 'wv', 'ape', 'tta', 'spx', 'mpc', 'voc', 'w64', 'ra', 'gsm'];
+export const AUDIO_IN = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'm4b', 'ogg', 'opus', 'wma', 'aiff', 'ac3', 'eac3', 'dts', 'amr', 'mka', 'weba', 'caf', 'au', 'mp2', 'wv', 'ape', 'tta', 'spx', 'mpc', 'voc', 'w64', 'ra', 'gsm', 'mod', 'xm', 'it', 's3m'];
 const VIDEO_OUT = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'wmv', 'flv', 'mpeg', 'm4v', '3gp', 'ogv', 'ts'];
 const ANIM_OUT = ['gif', 'apng', 'webp'];
 const FRAME_OUT = ['jpg', 'png'];

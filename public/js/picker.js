@@ -29,6 +29,7 @@ const CAT_SUGGEST = {
   archive: ['zip', '7z', 'tar.gz'],
   font: ['woff2', 'ttf', 'woff'],
   subtitle: ['srt', 'vtt'],
+  model: ['stl', 'obj', 'glb', 'fbx', '3mf'],
 };
 
 export function suggestionsFor(from, targets, meta) {

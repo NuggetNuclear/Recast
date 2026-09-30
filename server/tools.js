@@ -92,6 +92,8 @@ export function findTools() {
     home && path.join(home, '.local', 'bin', 'yt-dlp'),
   ]);
 
+  const assimp = locate('ASSIMP_PATH', ['assimp'], [path.join(PF, 'Assimp', 'bin', 'x64', 'assimp.exe')], ['/usr/bin/assimp', '/usr/local/bin/assimp', '/opt/homebrew/bin/assimp']);
+
   const browser = locate('BROWSER_PATH', isWin ? [] : ['google-chrome', 'chromium', 'chromium-browser', 'microsoft-edge'], [
     path.join(PF86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
     path.join(PF, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
@@ -113,7 +115,7 @@ export function findTools() {
     if (fs.existsSync(beside)) ffprobe = beside;
   }
 
-  return { ffmpeg, ffprobe, sevenZip, sevenZipFull, soffice, pandoc, calibre, magick, browser, ytDlp };
+  return { ffmpeg, ffprobe, sevenZip, sevenZipFull, soffice, pandoc, calibre, magick, browser, ytDlp, assimp };
 }
 
 export let tools = findTools();

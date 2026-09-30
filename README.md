@@ -17,7 +17,7 @@ Then open <http://localhost:3000>. Use `npm run dev` to auto-restart the server 
 docker compose up -d --build
 ```
 
-Then open <http://localhost:3000>. The image bundles every engine — FFmpeg and ffprobe, libvips, MuPDF, 7-Zip with RAR, Chromium, LibreOffice, Pandoc, Calibre, ImageMagick 7 and yt-dlp with its JavaScript solver and browser impersonation (curl_cffi) — so nothing needs to be installed on the host. yt-dlp updates itself each time the container starts (set `YTDLP_AUTO_UPDATE=0` to turn that off), so `docker compose restart` is usually enough when a video site changes. If YouTube asks you to sign in, save a `cookies.txt` exported from your browser as `cookies/cookies.txt` next to `docker-compose.yml`. Use `RECAST_PORT=8080 docker compose up -d` to publish on another port.
+Then open <http://localhost:3000>. The image bundles every engine — FFmpeg and ffprobe, libvips, MuPDF, 7-Zip with RAR, Chromium, LibreOffice, Pandoc, Calibre, ImageMagick 7, Assimp and yt-dlp with its JavaScript solver and browser impersonation (curl_cffi) — so nothing needs to be installed on the host. yt-dlp updates itself each time the container starts (set `YTDLP_AUTO_UPDATE=0` to turn that off), so `docker compose restart` is usually enough when a video site changes. If YouTube asks you to sign in, save a `cookies.txt` exported from your browser as `cookies/cookies.txt` next to `docker-compose.yml`. Use `RECAST_PORT=8080 docker compose up -d` to publish on another port.
 
 ### Without Docker
 
@@ -44,9 +44,10 @@ Requires Node.js 20+. FFmpeg, libvips, MuPDF and 7-Zip ship with the npm depende
 | Ebooks | MuPDF | EPUB, MOBI, FB2, CBZ, XPS → PDF, images, text, DOCX with page size / font size control |
 | Spreadsheets | SheetJS | XLSX, XLS, XLSB, ODS, Numbers, CSV, TSV, DBF, SYLK, DIF, JSON, HTML, Markdown; per-sheet export, delimiters, formatting |
 | Data | js-yaml, fast-xml-parser, smol-toml, Papa Parse | JSON, JSON Lines, YAML, XML, TOML, CSV, INI ↔ each other, plus Markdown/HTML tables |
-| Archives | 7-Zip | ZIP, 7Z, RAR, TAR(.GZ/.BZ2/.XZ), ISO, CAB… repack with compression level, method, AES encryption; compress any file |
+| Archives | 7-Zip | ZIP, 7Z, RAR, TAR(.GZ/.BZ2/.XZ), ISO, CAB, DMG, VHD/VHDX/VMDK, MSI, LZ, SquashFS, ZIP-based packages (WAR, WHL, NUPKG, IPA…)… repack with compression level, method, AES encryption; compress any file |
 | Fonts | fonteditor-core | TTF, OTF, WOFF, WOFF2, EOT, SVG fonts, with subsetting and renaming |
-| Subtitles | FFmpeg | SRT, VTT, ASS, SSA, LRC, TTML; extract tracks from videos; timing shift; input encoding |
+| 3D models | Assimp | STL, OBJ, PLY, glTF/GLB, FBX, COLLADA, 3DS, 3MF, OFF → STL, OBJ, PLY, glTF/GLB, FBX, COLLADA, 3DS, 3MF, X3D; binary or text, triangulation, normals |
+| Subtitles | FFmpeg | SRT, VTT, ASS, SSA, LRC, TTML, SAMI, SCC, MPL2; extract tracks from videos; timing shift; input encoding |
 
 When no single engine can do a conversion, Recast chains them automatically (for example DOCX → HTML → PDF → PNG) and exposes the settings of every step.
 

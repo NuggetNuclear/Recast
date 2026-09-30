@@ -4,7 +4,7 @@ import { f, group } from '../schema.js';
 import { tools, versionOf } from '../tools.js';
 import { run, UserError, opt, clamp } from '../util.js';
 
-const IN = ['epub', 'mobi', 'azw', 'azw3', 'fb2', 'lit', 'pdb', 'lrf', 'rb', 'snb', 'tcr', 'txtz', 'htmlz', 'cbz', 'cbr', 'docx', 'odt', 'rtf', 'txt', 'html', 'md', 'pml', 'pdf'];
+const IN = ['epub', 'mobi', 'azw', 'azw3', 'fb2', 'lit', 'pdb', 'lrf', 'rb', 'snb', 'tcr', 'txtz', 'htmlz', 'cbz', 'cbr', 'chm', 'djvu', 'docx', 'odt', 'rtf', 'txt', 'html', 'md', 'pml', 'pdf'];
 const EBOOK_OUT = ['epub', 'mobi', 'azw3', 'fb2', 'lrf', 'pdb', 'rb', 'snb', 'tcr', 'txtz', 'htmlz', 'pml'];
 const DOC_OUT = ['pdf', 'docx', 'rtf', 'txt'];
 

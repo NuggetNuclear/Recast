@@ -5,7 +5,7 @@ import { tools } from '../tools.js';
 import { UserError, opt, clamp } from '../util.js';
 import { ffmpeg, probe } from './ff.js';
 
-const SUB_IN = ['srt', 'vtt', 'ass', 'ssa', 'lrc', 'sub'];
+const SUB_IN = ['srt', 'vtt', 'ass', 'ssa', 'lrc', 'sub', 'smi', 'scc', 'mpl'];
 const SUB_OUT = ['srt', 'vtt', 'ass', 'ssa', 'lrc', 'ttml'];
 const VIDEO_WITH_SUBS = ['mkv', 'mp4', 'mov', 'm4v', 'webm', 'ts', 'm2ts', 'mts', 'ogv'];
 const ENC = { srt: 'srt', vtt: 'webvtt', ass: 'ass', ssa: 'ssa', lrc: 'text', ttml: 'ttml' };

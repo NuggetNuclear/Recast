@@ -43,6 +43,8 @@
   --cat-archive: #6b645a;
   --cat-font: #7a4fd6;
   --cat-subtitle: #0e7490;
+
+  --cat-model: #9a6700;
   --cat-other: #6b645a;
   color-scheme: light;
 }
@@ -84,6 +86,8 @@
     --cat-archive: #b3aca1;
     --cat-font: #b79bff;
     --cat-subtitle: #4cc6e0;
+
+    --cat-model: #e3b341;
     color-scheme: dark;
   }
 }
@@ -124,6 +128,8 @@
   --cat-archive: #b3aca1;
   --cat-font: #b79bff;
   --cat-subtitle: #4cc6e0;
+
+  --cat-model: #e3b341;
   color-scheme: dark;
 }
 
@@ -309,6 +315,7 @@ kbd {
 [data-cat='archive'] { --c: var(--cat-archive); }
 [data-cat='font'] { --c: var(--cat-font); }
 [data-cat='subtitle'] { --c: var(--cat-subtitle); }
+[data-cat='model'] { --c: var(--cat-model); }
 
 /* ==========================================================================
    Hero & drop zone

@@ -7,10 +7,10 @@ import { tools, versionOf } from '../tools.js';
 import { dirs } from '../config.js';
 import { run, UserError, opt, clamp, ensureDir, rmrf } from '../util.js';
 
-const WRITER_IN = ['doc', 'docx', 'docm', 'dotx', 'odt', 'ott', 'rtf', 'wpd', 'wps', 'pages', 'abw', 'txt', 'html', 'xhtml'];
-const CALC_IN = ['xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'fods', 'csv', 'tsv', 'numbers', 'dbf', 'wk1', 'wks', 'qpw', 'slk', 'dif'];
-const IMPRESS_IN = ['ppt', 'pptx', 'pps', 'ppsx', 'odp', 'key'];
-const DRAW_IN = ['odg', 'vsdx', 'emf', 'wmf'];
+const WRITER_IN = ['doc', 'docx', 'docm', 'dotx', 'odt', 'ott', 'rtf', 'wpd', 'wps', 'pages', 'abw', 'txt', 'html', 'xhtml', 'hwp', 'sxw', 'wri'];
+const CALC_IN = ['xls', 'xlsx', 'xlsm', 'xlsb', 'ods', 'fods', 'csv', 'tsv', 'numbers', 'dbf', 'wk1', 'wks', 'qpw', 'slk', 'dif', 'sxc'];
+const IMPRESS_IN = ['ppt', 'pptx', 'pps', 'ppsx', 'odp', 'key', 'sxi'];
+const DRAW_IN = ['odg', 'vsdx', 'vsd', 'emf', 'wmf', 'cdr', 'dxf', 'wpg', 'sxd', 'pub'];
 
 const WRITER_OUT = ['docx', 'doc', 'odt', 'rtf', 'txt', 'html', 'epub', 'png', 'jpg'];
 const CALC_OUT = ['xlsx', 'xls', 'ods', 'csv', 'html', 'png'];

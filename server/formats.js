@@ -13,6 +13,7 @@ export const CATEGORIES = [
   { id: 'archive', label: 'Archive' },
   { id: 'font', label: 'Font' },
   { id: 'subtitle', label: 'Subtitle' },
+  { id: 'model', label: '3D model' },
 ];
 
 const F = (category, name) => ({ category, name });
@@ -20,6 +21,7 @@ const F = (category, name) => ({ category, name });
 export const FORMATS = {
   // Images
   jpg: F('image', 'JPEG image'),
+  jfif: F('image', 'JPEG File Interchange (JFIF)'),
   png: F('image', 'Portable Network Graphics'),
   webp: F('image', 'WebP image'),
   avif: F('image', 'AV1 image'),
@@ -58,7 +60,21 @@ export const FORMATS = {
   rw2: F('image', 'Panasonic RAW'),
   raf: F('image', 'Fujifilm RAW'),
   pef: F('image', 'Pentax RAW'),
+  nrw: F('image', 'Nikon RAW (compact)'),
+  srw: F('image', 'Samsung RAW'),
+  x3f: F('image', 'Sigma RAW'),
+  erf: F('image', 'Epson RAW'),
+  kdc: F('image', 'Kodak RAW'),
+  mrw: F('image', 'Minolta RAW'),
+  '3fr': F('image', 'Hasselblad RAW'),
+  iiq: F('image', 'Phase One RAW'),
   xcf: F('image', 'GIMP image'),
+  cur: F('image', 'Windows cursor'),
+  pict: F('image', 'Apple PICT'),
+  wbmp: F('image', 'Wireless bitmap'),
+  mng: F('image', 'Multiple-image PNG'),
+  fits: F('image', 'FITS astronomy image'),
+  dcm: F('image', 'DICOM medical image'),
 
   // Vector
   svg: F('vector', 'Scalable Vector Graphics'),
@@ -68,6 +84,11 @@ export const FORMATS = {
   wmf: F('vector', 'Windows metafile'),
   odg: F('vector', 'OpenDocument drawing'),
   vsdx: F('vector', 'Visio drawing'),
+  vsd: F('vector', 'Visio 2003 drawing'),
+  cdr: F('vector', 'CorelDRAW drawing'),
+  dxf: F('vector', 'AutoCAD DXF drawing'),
+  wpg: F('vector', 'WordPerfect graphic'),
+  sxd: F('vector', 'OpenOffice.org 1 drawing'),
 
   // Video
   mp4: F('video', 'MPEG-4 video'),
@@ -130,6 +151,11 @@ export const FORMATS = {
   ra: F('audio', 'RealAudio'),
   gsm: F('audio', 'GSM audio'),
   mid: F('audio', 'MIDI'),
+  m4r: F('audio', 'iPhone ringtone'),
+  mod: F('audio', 'Amiga tracker module'),
+  xm: F('audio', 'FastTracker 2 module'),
+  it: F('audio', 'Impulse Tracker module'),
+  s3m: F('audio', 'Scream Tracker 3 module'),
 
   // Documents
   pdf: F('document', 'Portable Document Format'),
@@ -161,6 +187,10 @@ export const FORMATS = {
   pages: F('document', 'Apple Pages'),
   abw: F('document', 'AbiWord'),
   man: F('document', 'Man page'),
+  pub: F('document', 'Microsoft Publisher'),
+  hwp: F('document', 'Hangul word processor'),
+  sxw: F('document', 'OpenOffice.org 1 text'),
+  wri: F('document', 'Windows Write'),
 
   // Ebooks
   epub: F('ebook', 'Electronic publication'),
@@ -179,6 +209,8 @@ export const FORMATS = {
   tcr: F('ebook', 'Psion ebook'),
   txtz: F('ebook', 'Zipped text ebook'),
   htmlz: F('ebook', 'Zipped HTML ebook'),
+  chm: F('ebook', 'Compiled HTML Help'),
+  djvu: F('ebook', 'DjVu document'),
 
   // Spreadsheets
   xlsx: F('spreadsheet', 'Excel workbook'),
@@ -196,6 +228,7 @@ export const FORMATS = {
   wk1: F('spreadsheet', 'Lotus 1-2-3'),
   wks: F('spreadsheet', 'Lotus / Works sheet'),
   qpw: F('spreadsheet', 'Quattro Pro'),
+  sxc: F('spreadsheet', 'OpenOffice.org 1 spreadsheet'),
 
   // Presentations
   pptx: F('presentation', 'PowerPoint presentation'),
@@ -204,6 +237,7 @@ export const FORMATS = {
   pps: F('presentation', 'PowerPoint 97-2003 show'),
   odp: F('presentation', 'OpenDocument presentation'),
   key: F('presentation', 'Apple Keynote'),
+  sxi: F('presentation', 'OpenOffice.org 1 presentation'),
 
   // Data
   json: F('data', 'JSON'),
@@ -237,6 +271,15 @@ export const FORMATS = {
   apk: F('archive', 'Android package'),
   z: F('archive', 'Unix compress'),
   zst: F('archive', 'Zstandard'),
+  lz: F('archive', 'Lzip'),
+  lzma: F('archive', 'LZMA'),
+  dmg: F('archive', 'macOS disk image'),
+  vhd: F('archive', 'Virtual hard disk'),
+  vhdx: F('archive', 'Hyper-V virtual disk'),
+  vmdk: F('archive', 'VMware virtual disk'),
+  msi: F('archive', 'Windows installer'),
+  xar: F('archive', 'XAR archive'),
+  squashfs: F('archive', 'SquashFS image'),
 
   // Fonts
   ttf: F('font', 'TrueType font'),
@@ -253,7 +296,27 @@ export const FORMATS = {
   lrc: F('subtitle', 'Lyrics (LRC)'),
   ttml: F('subtitle', 'Timed Text Markup'),
   sub: F('subtitle', 'MicroDVD subtitles'),
+  smi: F('subtitle', 'SAMI subtitles'),
+  scc: F('subtitle', 'Scenarist closed captions'),
+  mpl: F('subtitle', 'MPL2 subtitles'),
+
+  // 3D models
+  stl: F('model', 'STL 3D model'),
+  obj: F('model', 'Wavefront OBJ'),
+  ply: F('model', 'Polygon file (PLY)'),
+  gltf: F('model', 'glTF 2.0 (JSON)'),
+  glb: F('model', 'glTF 2.0 binary'),
+  fbx: F('model', 'Autodesk FBX'),
+  dae: F('model', 'COLLADA'),
+  '3ds': F('model', '3D Studio'),
+  '3mf': F('model', '3D Manufacturing Format'),
+  off: F('model', 'Object File Format'),
+  x3d: F('model', 'X3D scene'),
 };
+
+// Output spellings that are the same bytes as another format with a different
+// extension: convert to the canonical format, then name the file this way.
+export const OUTPUT_ALIASES = { jfif: 'jpg', m4r: 'm4a' };
 
 // Input spellings that map to a canonical format.
 export const ALIASES = {
@@ -272,6 +335,15 @@ export const ALIASES = {
   prc: 'mobi', kf8: 'azw3', cb7: 'cbz',
   dfont: 'ttf',
   dxfp: 'ttml', dfxp: 'ttml',
+  m4r: 'm4a', mptm: 'it', umx: 'mod', mo3: 'mod', mtm: 'mod', '669': 'mod',
+  ai: 'pdf', svgz: 'svg', dcm30: 'dcm', dicom: 'dcm', fit: 'fits', fts: 'fits', pct: 'pict', djv: 'djvu',
+  pptm: 'pptx', potm: 'pptx', ppsm: 'ppsx', xltm: 'xlsx', dotm: 'docx', vsdm: 'vsdx', vdx: 'vsd',
+  kml: 'xml', gpx: 'xml', rss: 'xml', atom: 'xml', xsd: 'xml', xsl: 'xml', xslt: 'xml', svc: 'xml', resx: 'xml',
+  geojson: 'json', har: 'json', webmanifest: 'json', properties: 'ini', cfg: 'ini', conf: 'ini', env: 'ini',
+  war: 'zip', ear: 'zip', whl: 'zip', nupkg: 'zip', xpi: 'zip', ipa: 'zip', aar: 'zip', appx: 'zip', msix: 'zip', vsix: 'zip', kmz: 'zip', sketch: 'zip',
+  tlz: 'lz', img: 'iso', udf: 'iso', sqsh: 'squashfs', snap: 'squashfs',
+  sami: 'smi', mpl2: 'mpl',
+  gltf2: 'gltf', stla: 'stl', stlb: 'stl',
 };
 
 /** Detect the canonical format of a filename (handles compound extensions like .tar.gz). */

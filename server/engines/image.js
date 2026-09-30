@@ -12,7 +12,7 @@ sharp.cache(false);
 
 export const SHARP_IN = ['jpg', 'png', 'webp', 'avif', 'gif', 'tiff', 'svg', 'heic'];
 export const FF_IN = ['bmp', 'ico', 'psd', 'tga', 'dds', 'exr', 'hdr', 'jp2', 'pcx', 'ppm', 'pgm', 'pbm', 'pam', 'pfm', 'qoi', 'sgi', 'xbm', 'xpm', 'xwd', 'dpx', 'ras'];
-const MAGICK_IN = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'orf', 'rw2', 'raf', 'pef', 'xcf', 'jxl'];
+const MAGICK_IN = ['cr2', 'cr3', 'nef', 'arw', 'dng', 'orf', 'rw2', 'raf', 'pef', 'nrw', 'srw', 'x3f', 'erf', 'kdc', 'mrw', '3fr', 'iiq', 'xcf', 'jxl', 'cur', 'pict', 'wbmp', 'mng', 'fits', 'dcm'];
 const SHARP_OUT = ['jpg', 'png', 'webp', 'avif', 'gif', 'tiff', 'ico'];
 const FF_OUT = ['bmp', 'tga', 'ppm', 'pgm', 'pbm', 'pam', 'pcx', 'qoi', 'sgi', 'jp2', 'xbm', 'xwd', 'dpx', 'exr', 'hdr'];
 const MAGICK_OUT = ['jxl'];
