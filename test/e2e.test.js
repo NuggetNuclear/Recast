@@ -15,6 +15,10 @@ import markup from '../server/engines/markup.js';
 import media from '../server/engines/media.js';
 import subtitle from '../server/engines/subtitle.js';
 import archive, { assertSafeExtractedDir } from '../server/engines/archive.js';
+import trace from '../server/engines/trace.js';
+import font from '../server/engines/font.js';
+import sheet from '../server/engines/sheet.js';
+import browser from '../server/engines/browser.js';
 
 async function withDir(fn) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'recast-test-'));
@@ -221,4 +225,63 @@ test('assertSafeExtractedDir rejects size limits', () => withDir(async (dir) => 
     delete process.env.MAX_EXTRACT_MB;
   }
 }));
+
+test('bundled vector conversion (potrace)', () => withDir(async (dir) => {
+  const input = path.join(dir, 'input.png');
+  await sharp({ create: { width: 10, height: 10, channels: 4, background: '#000000' } }).png().toFile(input);
+  const out = await trace.convert(ctx(input, 'png', 'svg', dir, dir));
+  assert.equal(path.extname(out[0]), '.svg');
+  assert.match(await fsp.readFile(out[0], 'utf8'), /<svg/);
+}));
+
+test('bundled font conversion (fonteditor-core)', () => withDir(async (dir) => {
+  const sampleWoff2 = path.resolve('node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2');
+  const outTtf = await font.convert(ctx(sampleWoff2, 'woff2', 'ttf', dir, dir));
+  assert.equal(path.extname(outTtf[0]), '.ttf');
+  assert.equal(fs.existsSync(outTtf[0]), true);
+
+  const outWoff = await font.convert(ctx(outTtf[0], 'ttf', 'woff', dir, dir));
+  assert.equal(path.extname(outWoff[0]), '.woff');
+  assert.equal(fs.existsSync(outWoff[0]), true);
+}));
+
+test('bundled spreadsheet conversion (SheetJS)', () => withDir(async (dir) => {
+  const input = path.join(dir, 'input.csv');
+  await fsp.writeFile(input, 'name,score\nAlice,100\nBob,90\n');
+  const out = await sheet.convert(ctx(input, 'csv', 'xlsx', dir, dir));
+  assert.equal(path.extname(out[0]), '.xlsx');
+  assert.equal(fs.existsSync(out[0]), true);
+}));
+
+test('bundled video media conversion', { skip: !tools.ffmpeg }, () => withDir(async (dir) => {
+  const input = path.join(dir, 'input.mkv');
+  await new Promise((resolve, reject) => {
+    const child = spawn(tools.ffmpeg, ['-y', '-f', 'lavfi', '-i', 'color=c=blue:size=64x64:duration=0.5:rate=10', input], { stdio: 'ignore', windowsHide: true });
+    child.on('error', reject);
+    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`)));
+  });
+  const out = await media.convert(ctx(input, 'mkv', 'mp4', dir, dir));
+  assert.equal(path.extname(out[0]), '.mp4');
+  assert.equal(fs.existsSync(out[0]), true);
+}));
+
+test('bundled browser html to pdf conversion', async (t) => {
+  const detection = await browser.detect();
+  if (!detection.available) {
+    t.skip(`Skipping browser test: ${detection.note || 'No Chromium-based browser found'}`);
+    return;
+  }
+  await withDir(async (dir) => {
+    const input = path.join(dir, 'input.html');
+    await fsp.writeFile(input, '<h1>Recast PDF Test</h1><p>Rendering via Chromium</p>');
+    try {
+      const out = await browser.convert(ctx(input, 'html', 'pdf', dir, dir));
+      assert.equal(path.extname(out[0]), '.pdf');
+      assert.equal(fs.existsSync(out[0]), true);
+    } finally {
+      await browser.shutdown();
+    }
+  });
+});
+
 
