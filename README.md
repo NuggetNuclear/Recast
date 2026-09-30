@@ -17,7 +17,7 @@ Then open <http://localhost:3000>. Use `npm run dev` to auto-restart the server 
 docker compose up -d --build
 ```
 
-Then open <http://localhost:3000>. The image bundles every engine — FFmpeg, libvips, MuPDF, 7-Zip with RAR, Chromium, LibreOffice, Pandoc, Calibre, ImageMagick 7 and yt-dlp — so nothing needs to be installed on the host. yt-dlp updates itself each time the container starts (set `YTDLP_AUTO_UPDATE=0` to turn that off), so `docker compose restart` is usually enough when a video site changes. If YouTube asks you to sign in, save a `cookies.txt` exported from your browser as `cookies/cookies.txt` next to `docker-compose.yml`. Use `RECAST_PORT=8080 docker compose up -d` to publish on another port.
+Then open <http://localhost:3000>. The image bundles every engine — FFmpeg and ffprobe, libvips, MuPDF, 7-Zip with RAR, Chromium, LibreOffice, Pandoc, Calibre, ImageMagick 7 and yt-dlp with its JavaScript solver and browser impersonation (curl_cffi) — so nothing needs to be installed on the host. yt-dlp updates itself each time the container starts (set `YTDLP_AUTO_UPDATE=0` to turn that off), so `docker compose restart` is usually enough when a video site changes. If YouTube asks you to sign in, save a `cookies.txt` exported from your browser as `cookies/cookies.txt` next to `docker-compose.yml`. Use `RECAST_PORT=8080 docker compose up -d` to publish on another port.
 
 ### Without Docker
 

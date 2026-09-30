@@ -1,4 +1,4 @@
-# Recast with every engine: FFmpeg, libvips, MuPDF, 7-Zip (with RAR), Chromium,
+# Recast with every engine: FFmpeg (with ffprobe), libvips, MuPDF, 7-Zip (with RAR), Chromium,
 # LibreOffice, Pandoc, Calibre, ImageMagick 7 and yt-dlp.
 FROM node:24-trixie-slim
 
@@ -8,6 +8,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free/' /etc/apt/so
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       tini ca-certificates \
+      ffmpeg \
       chromium \
       libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-draw \
       pandoc calibre imagemagick 7zip 7zip-rar \
@@ -17,7 +18,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free/' /etc/apt/so
 
 # yt-dlp in its own venv, owned by the app user so it can update itself on start.
 RUN python3 -m venv /opt/yt-dlp \
- && /opt/yt-dlp/bin/pip install --no-cache-dir --disable-pip-version-check "yt-dlp[default]" \
+ && /opt/yt-dlp/bin/pip install --no-cache-dir --disable-pip-version-check "yt-dlp[default,curl-cffi]" \
  && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp \
  && chown -R node:node /opt/yt-dlp
 
@@ -34,6 +35,8 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
     DATA_DIR=/app/data \
+    FFMPEG_PATH=/usr/bin/ffmpeg \
+    FFPROBE_PATH=/usr/bin/ffprobe \
     BROWSER_PATH=/usr/bin/chromium \
     BROWSER_NO_SANDBOX=1 \
     QT_QPA_PLATFORM=offscreen \
