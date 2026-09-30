@@ -6,10 +6,10 @@ import os from 'node:os';
 import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { ZipArchive } from 'archiver';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { createRequire } from 'node:module';
+import { createZip, makeCraftedZip } from './zip-helpers.js';
 import { tools } from '../server/tools.js';
 import { run } from '../server/util.js';
 import { probe } from '../server/engines/ff.js';
@@ -106,75 +106,6 @@ test('bundled archive conversion when 7-Zip is available', { skip: !tools.sevenZ
   assert.equal(path.extname(out[0]), '.zip');
   assertMagic(out[0], 'zip', ZIP);
 }));
-
-function createZip(filePath, entries) {
-  return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(filePath);
-    const zip = new ZipArchive();
-    output.on('close', resolve);
-    zip.on('error', reject);
-    zip.pipe(output);
-    for (const [name, content] of Object.entries(entries)) {
-      zip.append(content, { name });
-    }
-    zip.finalize();
-  });
-}
-
-function makeCraftedZip(filename, content) {
-  const nameBuf = Buffer.from(filename, 'utf8');
-  const dataBuf = Buffer.from(content, 'utf8');
-
-  const lfh = Buffer.alloc(30 + nameBuf.length);
-  lfh.writeUInt32LE(0x04034b50, 0);
-  lfh.writeUInt16LE(20, 4);
-  lfh.writeUInt16LE(0, 6);
-  lfh.writeUInt16LE(0, 8);
-  lfh.writeUInt16LE(0, 10);
-  lfh.writeUInt16LE(0, 12);
-  lfh.writeUInt32LE(0, 14);
-  lfh.writeUInt32LE(dataBuf.length, 18);
-  lfh.writeUInt32LE(dataBuf.length, 22);
-  lfh.writeUInt16LE(nameBuf.length, 26);
-  lfh.writeUInt16LE(0, 28);
-  nameBuf.copy(lfh, 30);
-
-  const lfhOffset = 0;
-
-  const cdh = Buffer.alloc(46 + nameBuf.length);
-  cdh.writeUInt32LE(0x02014b50, 0);
-  cdh.writeUInt16LE(20, 4);
-  cdh.writeUInt16LE(20, 6);
-  cdh.writeUInt16LE(0, 8);
-  cdh.writeUInt16LE(0, 10);
-  cdh.writeUInt16LE(0, 12);
-  cdh.writeUInt16LE(0, 14);
-  cdh.writeUInt32LE(0, 16);
-  cdh.writeUInt32LE(dataBuf.length, 20);
-  cdh.writeUInt32LE(dataBuf.length, 24);
-  cdh.writeUInt16LE(nameBuf.length, 28);
-  cdh.writeUInt16LE(0, 30);
-  cdh.writeUInt16LE(0, 32);
-  cdh.writeUInt16LE(0, 34);
-  cdh.writeUInt16LE(0, 36);
-  cdh.writeUInt32LE(0, 38);
-  cdh.writeUInt32LE(lfhOffset, 42);
-  nameBuf.copy(cdh, 46);
-
-  const cdOffset = lfh.length + dataBuf.length;
-  const cdSize = cdh.length;
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0);
-  eocd.writeUInt16LE(0, 4);
-  eocd.writeUInt16LE(0, 6);
-  eocd.writeUInt16LE(1, 8);
-  eocd.writeUInt16LE(1, 10);
-  eocd.writeUInt32LE(cdSize, 12);
-  eocd.writeUInt32LE(cdOffset, 16);
-  eocd.writeUInt16LE(0, 20);
-
-  return Buffer.concat([lfh, dataBuf, cdh, eocd]);
-}
 
 test('archive zip to tar round trip', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
   const zipPath = path.join(dir, 'input.zip');
