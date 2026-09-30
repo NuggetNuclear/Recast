@@ -145,4 +145,4 @@ export function verifyHostAndAuth(host, user, password, allowUnauthenticated = p
   if (!allowUnauthenticated && !isLoopback && (!hasUser || !hasPass)) {
     throw new Error(`Refusing to bind non-loopback host "${host}" without authentication. Set both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD to protect Recast on the network.`);
   }
-}
+}
