@@ -7,6 +7,7 @@ import { f, group } from '../schema.js';
 import { tools } from '../tools.js';
 import { run, UserError, opt, hexToRgb, clamp, ensureDir } from '../util.js';
 import { ffmpeg, probe as ffprobe } from './ff.js';
+import { config } from '../config.js';
 
 sharp.cache(false);
 
@@ -23,7 +24,7 @@ export const imageInputs = () => [...SHARP_IN, ...FF_IN, ...(tools.magick ? MAGI
 
 /** Open any supported image as a sharp pipeline. */
 export async function loadImage(input, from, { animated = false, page = 0, density, tmpDir, signal } = {}) {
-  const common = { limitInputPixels: false, failOn: 'none' };
+  const common = { limitInputPixels: config.maxPixels, failOn: 'none' };
   if (from === 'heic') {
     const img = await heicDecode({ buffer: await fsp.readFile(input) });
     return sharp(Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength), { ...common, raw: { width: img.width, height: img.height, channels: 4 } });
@@ -45,7 +46,7 @@ export async function loadImage(input, from, { animated = false, page = 0, densi
 async function probe(input, from) {
   try {
     if (from === 'heic') {
-      const meta = await sharp(input).metadata().catch(() => null);
+      const meta = await sharp(input, { limitInputPixels: config.maxPixels }).metadata().catch(() => null);
       if (meta?.width) return { width: meta.width, height: meta.height };
       return {};
     }
@@ -54,7 +55,7 @@ async function probe(input, from) {
       return p?.video ? { width: p.video.width, height: p.video.height } : {};
     }
     if (!SHARP_IN.includes(from)) return {};
-    const m = await sharp(input, { limitInputPixels: false }).metadata();
+    const m = await sharp(input, { limitInputPixels: config.maxPixels }).metadata();
     return {
       width: m.width,
       height: m.pageHeight && m.pages > 1 ? m.pageHeight : m.height,

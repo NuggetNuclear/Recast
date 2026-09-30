@@ -11,10 +11,16 @@ import { pdfPageSchema } from './engines/imagepdf.js';
 import * as store from './jobs.js';
 import { startFetch, getFetch, publicFetch, cancelFetch, sweepFetches, resetFetches } from './fetch.js';
 import { UserError, ensureDir, safeName } from './util.js';
+import { assertId, assertIndex, basicAuthValid } from './security.js';
 
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
+app.use((req, res, next) => {
+  if (!config.authUser || !config.authPassword || basicAuthValid(req.get('authorization'), config.authUser, config.authPassword)) return next();
+  res.set('WWW-Authenticate', 'Basic realm="Recast"');
+  return res.status(401).json({ error: 'Authentication required' });
+});
 
 // ---------- static assets
 app.use(express.static(path.join(ROOT, 'public'), { extensions: ['html'], maxAge: 0 }));
@@ -80,32 +86,33 @@ app.post('/api/uploads/url', wrap(async (req, res) => {
 }));
 
 app.get('/api/fetches/:id', (req, res) => {
-  const job = getFetch(req.params.id);
+  const job = getFetch(assertId(req.params.id, 'download id'));
   if (!job) return res.status(404).json({ error: 'Download not found' });
   res.json(publicFetch(job));
 });
 
 app.post('/api/fetches/:id/cancel', (req, res) => {
-  cancelFetch(req.params.id);
-  const job = getFetch(req.params.id);
+  const id = assertId(req.params.id, 'download id');
+  cancelFetch(id);
+  const job = getFetch(id);
   res.json(job ? publicFetch(job) : { ok: true });
 });
 
 app.get('/api/uploads/:id', (req, res) => {
-  const up = store.getUpload(req.params.id);
+  const up = store.getUpload(assertId(req.params.id, 'upload id'));
   if (!up) return res.status(404).json({ error: 'Upload not found' });
   res.json(store.uploadJson(up));
 });
 
 // The imported file as-is, e.g. a video fetched from a link, without converting it.
 app.get('/api/uploads/:id/file', (req, res) => {
-  const up = store.getUpload(req.params.id);
+  const up = store.getUpload(assertId(req.params.id, 'upload id'));
   if (!up) return res.status(404).json({ error: 'Upload not found' });
   sendFile(res, up, req.query.inline === '1');
 });
 
 app.delete('/api/uploads/:id', wrap(async (req, res) => {
-  await store.deleteUpload(req.params.id);
+  await store.deleteUpload(assertId(req.params.id, 'upload id'));
   res.json({ ok: true });
 }));
 
@@ -178,18 +185,18 @@ app.get('/api/jobs/events', (req, res) => {
 });
 
 app.get('/api/jobs/:id', (req, res) => {
-  const j = store.getJob(req.params.id);
+  const j = store.getJob(assertId(req.params.id, 'job id'));
   if (!j) return res.status(404).json({ error: 'Job not found' });
   res.json(store.jobJson(j));
 });
 
 app.post('/api/jobs/:id/cancel', (req, res) => {
-  store.cancelJob(req.params.id);
+  store.cancelJob(assertId(req.params.id, 'job id'));
   res.json({ ok: true });
 });
 
 app.delete('/api/jobs/:id', wrap(async (req, res) => {
-  await store.deleteJob(req.params.id);
+  await store.deleteJob(assertId(req.params.id, 'job id'));
   res.json({ ok: true });
 }));
 
@@ -228,7 +235,7 @@ async function sendZip(res, files, zipName) {
 }
 
 app.get('/api/jobs/:id/download', wrap(async (req, res) => {
-  const j = store.getJob(req.params.id);
+  const j = store.getJob(assertId(req.params.id, 'job id'));
   if (!j || j.status !== 'done') return res.status(404).json({ error: 'Nothing to download' });
   if (j.outputs.length === 1) return sendFile(res, j.outputs[0], req.query.inline === '1');
   const up = store.getUpload(j.uploadId);
@@ -237,8 +244,8 @@ app.get('/api/jobs/:id/download', wrap(async (req, res) => {
 }));
 
 app.get('/api/jobs/:id/files/:index', (req, res) => {
-  const j = store.getJob(req.params.id);
-  const f = j?.outputs?.[Number(req.params.index)];
+  const j = store.getJob(assertId(req.params.id, 'job id'));
+  const f = j?.outputs?.[assertIndex(req.params.index)];
   if (!f) return res.status(404).json({ error: 'File not found' });
   sendFile(res, f, req.query.inline === '1');
 });

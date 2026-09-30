@@ -80,3 +80,6 @@ Instala cualquiera de estos y haz clic en **Motores → Reescanear** (o reinicia
 | `JOB_TIMEOUT_MIN` | `120` | Tiempo límite por conversión o descarga |
 | `YTDLP_PATH` | | Ruta al ejecutable yt-dlp si no está en `PATH` |
 | `YTDLP_COOKIES` | | Archivo `cookies.txt` exportado para sitios con inicio de sesión |
+| `MAX_IMAGE_PIXELS` | `100000000` | Máximo de píxeles de imagen decodificados por archivo |
+| `RECAST_AUTH_USER` | | Usuario opcional de Basic Auth para la aplicación y el proxy |
+| `RECAST_AUTH_PASSWORD` | | Contraseña opcional de Basic Auth; úsala junto al usuario |

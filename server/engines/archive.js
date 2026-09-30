@@ -4,6 +4,7 @@ import path from 'node:path';
 import { f, group } from '../schema.js';
 import { tools, versionOf } from '../tools.js';
 import { run, UserError, opt, clamp, ensureDir } from '../util.js';
+import { assertArchiveEntry } from '../security.js';
 
 const ARCHIVE_IN_BASE = ['zip', '7z', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz', 'gz', 'bz2', 'xz', 'iso', 'cab', 'wim', 'lzh', 'arj', 'cpio', 'rpm', 'deb', 'jar', 'apk', 'z', 'cbz', 'lzma'];
 const ARCHIVE_IN_FULL = ['rar', 'cbr', 'zst', 'lz', 'dmg', 'vhd', 'vhdx', 'vmdk', 'msi', 'xar', 'squashfs'];
@@ -64,6 +65,11 @@ async function listFiles(dir) {
   return out;
 }
 
+async function assertSafeArchive(input, password) {
+  const { stdout } = await run(tools.sevenZip, ['l', '-slt', `-p${password || 'none'}`, '-sccUTF-8', input], { timeoutMs: 30000, okCodes: [0, 1, 2] });
+  for (const line of stdout.split(/\r?\n/)) if (line.startsWith('Path = ')) assertArchiveEntry(line.slice(7));
+}
+
 async function convert({ input, from, to, o, outDir, baseName, tmpDir, signal, progress, originalName }) {
   if (!tools.sevenZip) throw new UserError('7-Zip is not available');
   const out = path.join(outDir, `${baseName}.${to}`);
@@ -82,7 +88,9 @@ async function convert({ input, from, to, o, outDir, baseName, tmpDir, signal, p
   const content = path.join(tmpDir, 'content');
   await ensureDir(content);
   if (isArchive) {
-    const pw = `-p${opt.str(o.inPassword) || 'none'}`;
+    const password = opt.str(o.inPassword);
+    await assertSafeArchive(input, password);
+    const pw = `-p${password || 'none'}`;
     await sevenZip(['x', pw, `-o${content}`, input], { signal, progress: (p) => progress(p * 0.45) });
     // Compressed tarballs extract to a .tar first — unpack that too.
     const first = await listFiles(content);

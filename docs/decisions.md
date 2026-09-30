@@ -1,5 +1,25 @@
 # Decisions and discoveries
 
+## Security
+
+Recast is a local tool, but uploads, pasted URLs, and conversion options are untrusted. This table maps the main entry points to their sinks and controls.
+
+| Entry point | Sink | Risk and control |
+| --- | --- | --- |
+| `POST /api/uploads`, `registerUpload` | Multer writes to `data/uploads/<uuid>`; probe engines read the file | Malformed media reaches native parsers. Upload size, UUID directories, safe filenames, probe timeouts, and the image pixel ceiling limit impact. |
+| `POST /api/uploads/url`, `fetch.js` | Node `fetch`, redirect targets, streamed file writes | SSRF and disk exhaustion. Only HTTP(S) public addresses are allowed; DNS results and every direct-download redirect are checked; bodies are capped. |
+| URL import with yt-dlp | yt-dlp and its ffmpeg child process | Network access and process abuse. Preferences are an allow-list, config loading is disabled when supported, output is confined to the fetch directory, and process groups are killed on cancellation. |
+| `/api/jobs`, queue worker | Every engine's `convert()` and temporary/output directories | Untrusted bytes reach FFmpeg, libvips, MuPDF, 7-Zip, Office, Pandoc, Calibre, ImageMagick, Assimp, and font parsers. Routes are server-selected; options are bounded before execution; jobs are time-limited. |
+| Archive conversion | 7-Zip extraction into a temporary directory | Zip-slip or archive bombs. Archive paths are rejected before extraction; output and upload limits still apply. Native decompression limits remain engine-dependent. |
+| HTML/Markdown/PDF-to-browser routes | Chromium `file://` page and child browser | Scripted documents could read local files or call the network. Request interception permits only the input directory and blocks non-file requests. The sandbox remains enabled unless `BROWSER_NO_SANDBOX=1` is explicitly set. |
+| Download routes and `sendFile` | Files stored under job/upload UUID directories | Traversal through IDs or output indexes. IDs must be UUIDs, indexes are bounded integers, and names are sanitized; paths originate from server-owned records. |
+| All API routes and `/api/jobs/events` | HTTP responses and SSE | Optional Basic Auth now protects the Express app and raw dev proxy. Without credentials the service is still intended for trusted localhost use only. |
+| `server/dev-proxy.js` | TCP forwarding from `0.0.0.0` | LAN exposure without identity. The proxy checks `RECAST_AUTH_USER` and `RECAST_AUTH_PASSWORD` when configured; this remains opt-in for local development. |
+
+High and critical fixes are centralized in `server/security.js`, keeping the engine contract unchanged. External programs still receive argument arrays through `spawn`, never shell text. Option strings are NUL/size checked without rejecting valid negative numeric settings.
+
+Deferred: a fully race-free DNS-rebinding defense for yt-dlp requires a network namespace or an egress proxy that pins approved destinations; initial URL validation cannot control yt-dlp's own resolver. Native decompression ratios and FFmpeg filter complexity are bounded by upload size and job timeout but do not have universal per-format quotas.
+
 This file records choices that are easy to undo by accident, and behaviour that only showed up once a real tool or a real site was involved. The structure those choices sit in is [architecture](architecture.md).
 
 ## Conversion graph

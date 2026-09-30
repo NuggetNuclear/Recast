@@ -7,6 +7,7 @@ import { PDFDocument, rgb, pushGraphicsState, popGraphicsState, rectangle, clip,
 import { f, group, PAPER_SIZES, paperMm } from '../schema.js';
 import { UserError, opt, clamp, hexToRgb } from '../util.js';
 import { imageInputs, loadImage } from './image.js';
+import { config } from '../config.js';
 
 const MM = 72 / 25.4;
 
@@ -34,7 +35,7 @@ export function pdfPageSchema({ info, multi = false } = {}) {
 
 /** Add one image file (all frames if requested) to a pdf-lib document. */
 export async function addImagePages(pdf, input, from, o, tmpDir) {
-  const meta = SHARP_META.includes(from) ? await sharp(input, { limitInputPixels: false }).metadata().catch(() => ({})) : {};
+  const meta = SHARP_META.includes(from) ? await sharp(input, { limitInputPixels: config.maxPixels }).metadata().catch(() => ({})) : {};
   const frames = opt.bool(o.allFrames, false) && (meta.pages || 1) > 1 ? meta.pages : 1;
   for (let fi = 0; fi < frames; fi++) {
     let embedded;

@@ -92,6 +92,9 @@ Tools are found on `PATH` or in their default install folders; you can also poin
 | `JOB_TIMEOUT_MIN` | `120` | Maximum time for a single conversion or link download |
 | `YTDLP_PATH` | | Path to the yt-dlp binary, if it is not on `PATH` |
 | `YTDLP_COOKIES` | | `cookies.txt` exported from your browser, for sites that require a sign-in |
+| `MAX_IMAGE_PIXELS` | `100000000` | Maximum decoded image pixels per input |
+| `RECAST_AUTH_USER` | | Optional Basic Auth username for the app and proxy |
+| `RECAST_AUTH_PASSWORD` | | Optional Basic Auth password; set together with the username |
 
 The data directory is wiped when the server starts.
 

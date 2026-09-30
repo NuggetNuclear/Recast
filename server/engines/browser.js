@@ -133,6 +133,16 @@ async function convert({ input, from, to, o, outDir, baseName, signal, progress 
     page = await browser.newPage();
     const onAbort = () => page?.close().catch(() => {});
     signal?.addEventListener('abort', onAbort, { once: true });
+    await page.setRequestInterception(true);
+    const root = path.dirname(input);
+    page.on('request', (request) => {
+      const target = request.url();
+      if (!target.startsWith('file://')) return request.abort();
+      try {
+        const local = path.resolve(new URL(target).pathname);
+        return local === path.resolve(input) || local.startsWith(`${path.resolve(root)}${path.sep}`) ? request.continue() : request.abort();
+      } catch { return request.abort(); }
+    });
     await page.setJavaScriptEnabled(opt.bool(o.javascript, true));
     const isPdf = to === 'pdf';
     await page.setViewport({

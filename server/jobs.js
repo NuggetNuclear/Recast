@@ -7,6 +7,7 @@ import { detectFormat } from './formats.js';
 import { findRoute, getEngine, probeFile } from './registry.js';
 import { mergeToPdf } from './engines/imagepdf.js';
 import { UserError, ensureDir, rmrf, fileSize, safeName, stripExt } from './util.js';
+import { validateOptions } from './security.js';
 
 export const jobEvents = new EventEmitter();
 jobEvents.setMaxListeners(200);
@@ -78,7 +79,8 @@ export function createJob({ uploadId, to, options }) {
   if (!up) throw new UserError('The uploaded file has expired — please add it again');
   const route = findRoute(up.format, to);
   if (!route) throw new UserError(`Converting ${up.format ? up.format.toUpperCase() : 'this file'} to ${to.toUpperCase()} is not supported`);
-  const job = newJob({ kind: 'convert', uploadId, to, steps: route.steps, renameTo: route.renameTo || null, options: Array.isArray(options) ? options : [options || {}] });
+  const checked = validateOptions(Array.isArray(options) ? options : [options || {}]);
+  const job = newJob({ kind: 'convert', uploadId, to, steps: route.steps, renameTo: route.renameTo || null, options: checked });
   enqueue(job);
   return job;
 }
@@ -87,7 +89,7 @@ export function createMergeJob({ uploadIds, options, name }) {
   const items = uploadIds.map((id) => uploads.get(id));
   if (items.some((x) => !x)) throw new UserError('Some files have expired — please add them again');
   if (items.length < 2) throw new UserError('Choose at least two files to merge');
-  const job = newJob({ kind: 'merge', uploadIds, to: 'pdf', options: [options || {}], mergeName: safeName(name || 'merged') });
+  const job = newJob({ kind: 'merge', uploadIds, to: 'pdf', options: [validateOptions(options || {})], mergeName: safeName(name || 'merged') });
   enqueue(job);
   return job;
 }
@@ -104,7 +106,11 @@ export async function deleteJob(id) {
   const j = jobs.get(id);
   if (!j) return false;
   if (j.status === 'queued') queue.splice(queue.indexOf(id), 1);
-  j.controller?.abort();
+  if (j.status === 'processing') {
+    j.deleteRequested = true;
+    j.controller?.abort();
+    return true;
+  }
   jobs.delete(id);
   await rmrf(path.join(dirs.jobs, id));
   return true;
@@ -171,6 +177,10 @@ async function run(job) {
     clearTimeout(timer);
     job.finishedAt = Date.now();
     delete job.controller;
+    if (job.deleteRequested) {
+      jobs.delete(job.id);
+      await rmrf(jobDir);
+    }
   }
 }
 
