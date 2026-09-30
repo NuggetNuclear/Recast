@@ -4,10 +4,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { config, dirs } from './config.js';
 import { detectFormat } from './formats.js';
-import { findRoute, getEngine, probeFile } from './registry.js';
-import { mergeToPdf } from './engines/imagepdf.js';
+import { findRoute, getEngine, probeFile, validateJobOptions, validateStepOptions } from './registry.js';
+import { mergeToPdf, pdfPageSchema } from './engines/imagepdf.js';
 import { UserError, ensureDir, rmrf, fileSize, safeName, stripExt } from './util.js';
-import { validateOptions } from './security.js';
 
 export const jobEvents = new EventEmitter();
 jobEvents.setMaxListeners(200);
@@ -79,7 +78,7 @@ export function createJob({ uploadId, to, options }) {
   if (!up) throw new UserError('The uploaded file has expired — please add it again');
   const route = findRoute(up.format, to);
   if (!route) throw new UserError(`Converting ${up.format ? up.format.toUpperCase() : 'this file'} to ${to.toUpperCase()} is not supported`);
-  const checked = validateOptions(Array.isArray(options) ? options : [options || {}]);
+  const checked = validateJobOptions(route, options, up.info);
   const job = newJob({ kind: 'convert', uploadId, to, steps: route.steps, renameTo: route.renameTo || null, options: checked });
   enqueue(job);
   return job;
@@ -89,7 +88,8 @@ export function createMergeJob({ uploadIds, options, name }) {
   const items = uploadIds.map((id) => uploads.get(id));
   if (items.some((x) => !x)) throw new UserError('Some files have expired — please add them again');
   if (items.length < 2) throw new UserError('Choose at least two files to merge');
-  const job = newJob({ kind: 'merge', uploadIds, to: 'pdf', options: [validateOptions(options || {})], mergeName: safeName(name || 'merged') });
+  const checked = validateStepOptions(options || {}, pdfPageSchema({ multi: true }));
+  const job = newJob({ kind: 'merge', uploadIds, to: 'pdf', options: [checked], mergeName: safeName(name || 'merged') });
   enqueue(job);
   return job;
 }

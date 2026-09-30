@@ -4,6 +4,7 @@ import nodeDns from 'node:dns';
 import http from 'node:http';
 import { fetch } from 'undici';
 import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
+import { getEngine, validateStepOptions } from '../server/registry.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
   const privateIps = [
@@ -125,3 +126,30 @@ test('redirect whose Location points at a private IP is rejected', async () => {
     server.close();
   }
 });
+
+test('engine option schemas are enforced server-side', () => {
+  const pandocSchema = getEngine('pandoc').schema({ from: 'md', to: 'html' });
+
+  // 1. Injected pandoc math value is rejected
+  assert.throws(
+    () => validateStepOptions({ math: '--extract-media=/tmp' }, pandocSchema),
+    /Invalid choice for math/
+  );
+
+  // 2. Unknown key is dropped
+  const cleaned = validateStepOptions({ evilKey: 'injected', standalone: true }, pandocSchema);
+  assert.equal(cleaned.evilKey, undefined);
+  assert.equal(cleaned.standalone, true);
+
+  // 3. Valid negative number passes
+  const mediaSchema = getEngine('media').schema({ from: 'mp3', to: 'mp3' });
+  const validNegative = validateStepOptions({ volume: -16 }, mediaSchema);
+  assert.equal(validNegative.volume, -16);
+
+  // 4. Out-of-range number fails
+  assert.throws(
+    () => validateStepOptions({ volume: 100 }, mediaSchema),
+    /must be at most/
+  );
+});
+

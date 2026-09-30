@@ -3,6 +3,7 @@
 // formats (png, pdf, html, json) to reach targets no single engine supports.
 import { FORMATS, OUTPUT_ALIASES, categoryOf } from './formats.js';
 import { rescanTools } from './tools.js';
+import { UserError } from './util.js';
 import image from './engines/image.js';
 import media from './engines/media.js';
 import subtitle from './engines/subtitle.js';
@@ -191,4 +192,98 @@ export async function probeFile(path, format) {
 
 export async function shutdownEngines() {
   await Promise.all(ENGINES.map((e) => e.shutdown?.().catch(() => {})));
+}
+
+export function validateStepOptions(rawOptions, groups) {
+  if (!rawOptions || typeof rawOptions !== 'object') return {};
+  const fieldMap = new Map();
+  for (const g of (groups || [])) {
+    for (const fl of (g.fields || [])) {
+      if (fl?.key && fl.type !== 'note') {
+        fieldMap.set(fl.key, fl);
+      }
+    }
+  }
+
+  const validated = {};
+  for (const [key, val] of Object.entries(rawOptions)) {
+    const field = fieldMap.get(key);
+    if (!field) continue;
+    if (val === undefined || val === null || val === '') {
+      if (field.type === 'select') {
+        const allowed = field.options.map((o) => String(o.value));
+        if (allowed.includes('')) validated[key] = '';
+      }
+      continue;
+    }
+
+    switch (field.type) {
+      case 'select': {
+        const strVal = String(val);
+        const allowed = field.options.map((o) => String(o.value));
+        if (!allowed.includes(strVal)) {
+          throw new UserError(`Invalid choice for ${field.key}: "${val}"`);
+        }
+        validated[key] = strVal;
+        break;
+      }
+      case 'number':
+      case 'range': {
+        const n = typeof val === 'number' ? val : Number(val);
+        if (!Number.isFinite(n)) {
+          throw new UserError(`Invalid number for ${field.key}`);
+        }
+        if (field.min !== undefined && n < field.min) {
+          throw new UserError(`Value for ${field.key} must be at least ${field.min}`);
+        }
+        if (field.max !== undefined && n > field.max) {
+          throw new UserError(`Value for ${field.key} must be at most ${field.max}`);
+        }
+        validated[key] = n;
+        break;
+      }
+      case 'toggle': {
+        if (typeof val !== 'boolean') {
+          throw new UserError(`Invalid boolean for ${field.key}`);
+        }
+        validated[key] = val;
+        break;
+      }
+      case 'text':
+      case 'textarea':
+      case 'color':
+      case 'time': {
+        if (typeof val !== 'string' || val.includes('\u0000') || val.length > 4096) {
+          throw new UserError(`Invalid text for ${field.key}`);
+        }
+        validated[key] = val;
+        break;
+      }
+      case 'multi': {
+        if (!Array.isArray(val)) {
+          throw new UserError(`Invalid array for ${field.key}`);
+        }
+        const allowed = new Set(field.options.map((o) => String(o.value)));
+        for (const item of val) {
+          if (!allowed.has(String(item))) {
+            throw new UserError(`Invalid choice for ${field.key}: "${item}"`);
+          }
+        }
+        validated[key] = val.map(String);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return validated;
+}
+
+export function validateJobOptions(route, options, info) {
+  const schemas = routeSchema(route, info);
+  const optsArray = Array.isArray(options) ? options : [options || {}];
+  return schemas.map((stepSchema, i) => {
+    const raw = optsArray[i] || {};
+    return validateStepOptions(raw, stepSchema.groups);
+  });
 }
