@@ -400,6 +400,8 @@ function renderChrome() {
   const app = $('.app');
   if (!app) return;
   app.classList.toggle('has-files', state.rows.length > 0);
+  const panel = $('.list-panel');
+  if (panel) panel.hidden = !state.rows.length;
   const title = $('#heroTitle');
   if (title) title.replaceChildren(...(state.rows.length ? ['Convert files'] : ['Convert any file.', h('br'), h('span.soft', 'Keep every setting.')]));
   const conv = state.rows.filter((r) => r.kind !== 'merge');
