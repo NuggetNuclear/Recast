@@ -328,3 +328,9 @@ test('browser rendering cannot reach the network, including WebSockets', async (
   }
   assert.deepEqual(hits, [], 'the rendered page must not connect to local servers');
 });
+
+test('assertSafeExtractedDir accepts names that merely start with two dots', () => withDir(async (dir) => {
+  await fsp.mkdir(path.join(dir, '..cache'));
+  await fsp.writeFile(path.join(dir, '..cache', '..notes.txt'), 'legitimate file names can start with ..');
+  await assert.doesNotReject(assertSafeExtractedDir(dir));
+}));

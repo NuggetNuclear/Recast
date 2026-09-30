@@ -114,7 +114,7 @@ export async function assertSafeExtractedDir(dir) {
 
       const real = await fsp.realpath(fullPath);
       const rel = path.relative(realDir, real);
-      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
         throw new UserError('Archive entry is outside extraction directory');
       }
 
