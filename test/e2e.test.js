@@ -226,6 +226,20 @@ test('assertSafeExtractedDir rejects size limits', () => withDir(async (dir) => 
   }
 }));
 
+test('archive exceeding uncompressed size cap fast-fails before extraction', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
+  const zipPath = path.join(dir, 'large.zip');
+  await createZip(zipPath, { 'big.bin': Buffer.alloc(1000) });
+  process.env.MAX_EXTRACT_MB = '0.0001';
+  try {
+    await assert.rejects(
+      archive.convert(ctx(zipPath, 'zip', 'tar', dir, path.join(dir, 't1'))),
+      /uncompressed size exceeds limit/i
+    );
+  } finally {
+    delete process.env.MAX_EXTRACT_MB;
+  }
+}));
+
 test('bundled vector conversion (potrace)', () => withDir(async (dir) => {
   const input = path.join(dir, 'input.png');
   await sharp({ create: { width: 10, height: 10, channels: 4, background: '#000000' } }).png().toFile(input);

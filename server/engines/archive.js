@@ -70,7 +70,23 @@ async function assertSafeArchive(input, password) {
   const { stdout } = await run(tools.sevenZip, ['l', '-slt', `-p${password || 'none'}`, '-sccUTF-8', input], { timeoutMs: 30000, okCodes: [0, 1, 2] });
   const parts = stdout.split(/^-{10,}\r?\n/m);
   const entriesText = parts.slice(1).join('\n');
-  for (const line of entriesText.split(/\r?\n/)) if (line.startsWith('Path = ')) assertArchiveEntry(line.slice(7));
+  const maxBytes = process.env.MAX_EXTRACT_MB !== undefined && process.env.MAX_EXTRACT_MB !== ''
+    ? Number(process.env.MAX_EXTRACT_MB) * 1024 * 1024
+    : config.maxExtractBytes;
+  let totalSize = 0;
+  for (const line of entriesText.split(/\r?\n/)) {
+    if (line.startsWith('Path = ')) {
+      assertArchiveEntry(line.slice(7));
+    } else if (line.startsWith('Size = ')) {
+      const sz = Number(line.slice(7).trim());
+      if (Number.isFinite(sz) && sz > 0) {
+        totalSize += sz;
+        if (totalSize > maxBytes) {
+          throw new UserError(`Archive uncompressed size exceeds limit (${Math.round(maxBytes / 1024 / 1024)} MB)`);
+        }
+      }
+    }
+  }
 }
 
 export async function assertSafeExtractedDir(dir) {
