@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import nodeDns from 'node:dns';
 import http from 'node:http';
+import net from 'node:net';
+import { spawn } from 'node:child_process';
 import { fetch } from 'undici';
 import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
 import { getEngine, validateStepOptions } from '../server/registry.js';
@@ -188,4 +190,37 @@ test('startup validation refuses non-loopback hosts without auth and partial cre
   assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', 'user', 'pass'));
   assert.doesNotThrow(() => verifyHostAndAuth('192.168.1.100', 'user', 'pass'));
 });
+
+test('server spawns on random loopback port and responds to /api/health', async () => {
+  const s = net.createServer();
+  await new Promise((resolve) => s.listen(0, '127.0.0.1', resolve));
+  const port = s.address().port;
+  await new Promise((resolve) => s.close(resolve));
+
+  const child = spawn(process.execPath, ['server/index.js'], {
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', RECAST_AUTH_USER: '', RECAST_AUTH_PASSWORD: '' },
+    stdio: 'pipe',
+  });
+
+  try {
+    let ok = false;
+    let body = null;
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      try {
+        const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+        if (res.status === 200) {
+          body = await res.json();
+          ok = true;
+          break;
+        }
+      } catch {}
+    }
+    assert.equal(ok, true, 'Server failed to respond to /api/health within timeout');
+    assert.equal(body?.ok, true);
+  } finally {
+    child.kill();
+  }
+});
+
 

@@ -307,7 +307,19 @@ async function main() {
   process.on('SIGTERM', stop);
 }
 
-const isMain = Boolean(process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url));
+function checkIsMain() {
+  if (!process.argv[1]) return false;
+  try {
+    const a = path.resolve(process.argv[1]);
+    const b = fileURLToPath(import.meta.url);
+    if (process.platform === 'win32') return a.toLowerCase() === b.toLowerCase();
+    return a === b;
+  } catch {
+    return false;
+  }
+}
+
+const isMain = checkIsMain();
 if (isMain) {
   main().catch((e) => {
     console.error(e);
