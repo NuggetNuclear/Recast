@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import nodeDns from 'node:dns';
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { fetch } from 'undici';
 import path from 'node:path';
@@ -13,7 +14,7 @@ import { pdfPageSchema } from '../server/engines/imagepdf.js';
 import { startFetch } from '../server/fetch.js';
 import { app, verifyHostAndAuth } from '../server/index.js';
 import * as store from '../server/jobs.js';
-import { run } from '../server/util.js';
+import { run, killAllChildren } from '../server/util.js';
 import { dirs } from '../server/config.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
@@ -367,3 +368,43 @@ test('run() terminates child process tree on abort and timeout', async () => {
 
 
 
+
+test('killAllChildren() stops every tracked child and its descendants', async () => {
+  const pidFile = path.join(os.tmpdir(), `recast-grandchild-${process.pid}.pid`);
+  await fsp.rm(pidFile, { force: true });
+  const grand = `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`;
+  const parent = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grand)}], { stdio: 'ignore' }); setInterval(() => {}, 1000)`;
+  const pending = run(process.execPath, ['-e', parent]);
+  let grandPid = 0;
+  for (let i = 0; i < 100 && !grandPid; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    grandPid = Number(await fsp.readFile(pidFile, 'utf8').catch(() => 0));
+  }
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  try {
+    assert.ok(grandPid && alive(grandPid), 'grandchild should be running before shutdown');
+    killAllChildren();
+    await assert.rejects(pending, /Cancelled|timed out/);
+    for (let i = 0; i < 50 && alive(grandPid); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(alive(grandPid), false, 'grandchild must not survive killAllChildren()');
+  } finally {
+    if (alive(grandPid)) process.kill(grandPid, 'SIGKILL');
+    await fsp.rm(pidFile, { force: true });
+  }
+});
+
+test('abortAllJobs() aborts processing jobs and cancels queued ones', () => {
+  const controller = new AbortController();
+  const running = { id: '33333333-3333-4333-8333-333333333333', status: 'processing', controller };
+  const waiting = { id: '44444444-4444-4444-8444-444444444444', status: 'queued', outputs: [], progress: 0 };
+  store.jobs.set(running.id, running);
+  store.jobs.set(waiting.id, waiting);
+  try {
+    store.abortAllJobs();
+    assert.equal(controller.signal.aborted, true);
+    assert.equal(waiting.status, 'cancelled');
+  } finally {
+    store.jobs.delete(running.id);
+    store.jobs.delete(waiting.id);
+  }
+});

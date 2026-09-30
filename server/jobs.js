@@ -130,12 +130,21 @@ export function cancelJob(id) {
   const j = jobs.get(id);
   if (!j) return false;
   if (j.status === 'queued') {
-    queue.splice(queue.indexOf(id), 1);
+    const at = queue.indexOf(id);
+    if (at >= 0) queue.splice(at, 1);
     j.status = 'cancelled';
     j.stage = 'Cancelled';
   } else if (j.status === 'processing') j.controller?.abort();
   notifyJob(j);
   return true;
+}
+
+/** Stop all work, for shutdown: queued jobs are cancelled and running ones are aborted. */
+export function abortAllJobs() {
+  for (const j of jobs.values()) {
+    if (j.status === 'queued') cancelJob(j.id);
+    else if (j.status === 'processing') j.controller?.abort();
+  }
 }
 
 function enqueue(job) {

@@ -561,6 +561,10 @@ export function cancelFetch(id) {
   return true;
 }
 
+export function abortAllFetches() {
+  for (const job of fetches.values()) if (job.status === 'working') job.controller.abort();
+}
+
 export function sweepFetches() {
   const cutoff = Date.now() - config.retentionMinutes * 60 * 1000;
   for (const [id, job] of fetches) {

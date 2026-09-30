@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -11,6 +11,16 @@ export class UserError extends Error {
     this.details = details;
   }
 }
+
+// Every child started by run() that is still alive, so a server shutdown can stop them all.
+const live = new Set();
+
+/** Kill every running child (and its descendants) started through run(). Safe to call from an exit handler. */
+export function killAllChildren() {
+  for (const entry of [...live]) entry.kill();
+}
+
+process.on('exit', killAllChildren);
 
 /**
  * Spawn a process and collect its output.
@@ -25,6 +35,7 @@ export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs
     let stdout = '';
     let stderr = '';
     let killedByUs = false;
+    let cancelledByShutdown = false;
     const cap = (s, add) => (s.length > 200_000 ? s.slice(-100_000) : s) + add;
     child.stdout.on('data', (d) => {
       const s = d.toString();
@@ -36,25 +47,32 @@ export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs
       stderr = cap(stderr, s);
       onStderr?.(s);
     });
-    const kill = () => {
+    const kill = ({ sync = false } = {}) => {
       killedByUs = true;
       if (detached && child.pid) {
         try { process.kill(-child.pid, 'SIGKILL'); } catch {}
       } else if (killGroup && process.platform === 'win32' && child.pid) {
-        spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], { windowsHide: true });
+        const args = ['/pid', String(child.pid), '/t', '/f'];
+        if (sync) spawnSync('taskkill', args, { windowsHide: true });
+        else spawn('taskkill', args, { windowsHide: true }).on('error', () => {});
       }
       try { child.kill('SIGKILL'); } catch {}
     };
-    signal?.addEventListener('abort', kill, { once: true });
+    const onAbort = () => kill();
+    const tracked = { kill: () => { cancelledByShutdown = true; kill({ sync: true }); } };
+    live.add(tracked);
+    signal?.addEventListener('abort', onAbort, { once: true });
     const timer = timeoutMs ? setTimeout(kill, timeoutMs) : null;
     child.on('error', (err) => {
       clearTimeout(timer);
+      live.delete(tracked);
       reject(new UserError(`Could not start ${path.basename(cmd)}: ${err.message}`));
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      signal?.removeEventListener('abort', kill);
-      if (killedByUs) return reject(new UserError(signal?.aborted ? 'Cancelled' : (timeoutMessage || 'The conversion timed out')));
+      live.delete(tracked);
+      signal?.removeEventListener('abort', onAbort);
+      if (killedByUs) return reject(new UserError(signal?.aborted || cancelledByShutdown ? 'Cancelled' : (timeoutMessage || 'The conversion timed out')));
       if (okCodes.includes(code)) return resolve({ code, stdout, stderr });
       const tail = (stderr || stdout).trim().split(/\r?\n/).slice(-25).join('\n');
       reject(new UserError(errorMessage || `${path.basename(cmd)} exited with code ${code}`, tail));

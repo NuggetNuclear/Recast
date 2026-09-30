@@ -10,8 +10,8 @@ import { CATEGORIES, FORMATS, ALIASES } from './formats.js';
 import { initEngines, rescan, allTargets, engineStatus, findRoute, routeSchema, shutdownEngines } from './registry.js';
 import { pdfPageSchema } from './engines/imagepdf.js';
 import * as store from './jobs.js';
-import { startFetch, getFetch, publicFetch, cancelFetch, sweepFetches, resetFetches } from './fetch.js';
-import { UserError, ensureDir, safeName } from './util.js';
+import { startFetch, getFetch, publicFetch, cancelFetch, abortAllFetches, sweepFetches, resetFetches } from './fetch.js';
+import { UserError, ensureDir, safeName, killAllChildren, sleep } from './util.js';
 import { assertId, assertIndex, basicAuthValid, verifyHostAndAuth } from './security.js';
 
 export { verifyHostAndAuth };
@@ -303,13 +303,20 @@ async function main() {
   });
   server.requestTimeout = 0;
   server.headersTimeout = 120_000;
+  let stopping = false;
   const stop = async () => {
+    if (stopping) process.exit(1);
+    stopping = true;
     server.close();
-    await shutdownEngines();
+    server.closeAllConnections();
+    // Tools run in their own process group, so they do not get the terminal's Ctrl+C: stop them explicitly.
+    store.abortAllJobs();
+    abortAllFetches();
+    killAllChildren();
+    await Promise.race([shutdownEngines(), sleep(5000)]);
     process.exit(0);
   };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', ...(process.platform === 'win32' ? ['SIGBREAK'] : [])]) process.on(sig, stop);
 }
 
 function checkIsMain() {
