@@ -96,6 +96,13 @@ app.get('/api/uploads/:id', (req, res) => {
   res.json(store.uploadJson(up));
 });
 
+// The imported file as-is, e.g. a video fetched from a link, without converting it.
+app.get('/api/uploads/:id/file', (req, res) => {
+  const up = store.getUpload(req.params.id);
+  if (!up) return res.status(404).json({ error: 'Upload not found' });
+  sendFile(res, up, req.query.inline === '1');
+});
+
 app.delete('/api/uploads/:id', wrap(async (req, res) => {
   await store.deleteUpload(req.params.id);
   res.json({ ok: true });

@@ -124,6 +124,7 @@ Each engine declares the routes it supports, an option schema the UI renders as 
 | `POST` | `/api/engines/rescan` | Find newly installed tools and return a fresh meta payload |
 | `POST` | `/api/uploads` | Multipart upload (`file`) → upload id + probed info |
 | `GET` | `/api/uploads/:id` | One upload |
+| `GET` | `/api/uploads/:id/file` | The uploaded or link-imported file as-is (`?inline=1` to view) |
 | `DELETE` | `/api/uploads/:id` | Delete an upload |
 | `POST` | `/api/uploads/url` | `{ url, preference?, playlist?, subtitles? }` starts a download. `preference` is `auto` (default), `best`, `1080`, `720`, `480` or `audio`. Returns `202` and a fetch id. |
 | `GET` | `/api/fetches/:id` | Progress. When `status` is `done`, `uploads` lists the imported files. |

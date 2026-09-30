@@ -14,6 +14,7 @@ RUN sed -i 's/^Components: main$/Components: main contrib non-free/' /etc/apt/so
       pandoc calibre imagemagick 7zip 7zip-rar \
       python3 python3-venv \
       fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji fonts-liberation2 fonts-dejavu-core \
+      fonts-crosextra-carlito fonts-crosextra-caladea \
  && rm -rf /var/lib/apt/lists/*
 
 # yt-dlp in its own venv, owned by the app user so it can update itself on start.

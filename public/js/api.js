@@ -30,7 +30,8 @@ export const api = {
   deleteJob: (id) => fetch(`/api/jobs/${id}`, { method: 'DELETE' }).catch(() => {}),
   downloadUrl: (jobId) => `/api/jobs/${jobId}/download`,
   fileUrl: (jobId, i, inline) => `/api/jobs/${jobId}/files/${i}${inline ? '?inline=1' : ''}`,
-  downloadAllUrl: (ids) => `/api/download?jobs=${ids.join(',')}`,
+  uploadFileUrl: (uploadId) => `/api/uploads/${uploadId}/file`,
+  downloadAllUrl:(ids) => `/api/download?jobs=${ids.join(',')}`,
 
   /** Upload with progress. Returns { promise, abort }. */
   upload(file, onProgress) {

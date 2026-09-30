@@ -354,6 +354,9 @@ function renderRow(row) {
     case 'ready':
       if (row.autoConvert) status.append(h('span.status-text', 'Starting…'));
       else if (row.target && row.steps?.length > 1) status.append(h('span.status-text', { title: row.steps.map((s) => `${s.from} → ${s.to} (${s.label})`).join('\n') }, `${row.steps.length}-step conversion`));
+      if (row.fromLink && row.upload && !row.autoConvert) {
+        status.append(h('a.btn.btn-sm', { href: api.uploadFileUrl(row.upload.id), download: '', title: 'Download the file as fetched, without converting' }, icon('download'), 'Download'));
+      }
       break;
     case 'done': {
       const outs = row.job.outputs;
@@ -365,6 +368,7 @@ function renderRow(row) {
         Math.abs(delta) >= 1 ? h('span.delta', { class: delta < 0 ? 'down' : 'up' }, `${delta > 0 ? '+' : '−'}${Math.abs(delta)}%`) : null));
       const viewable = outs.length === 1 && VIEWABLE.has(detectFormat(outs[0].name, state.meta.aliases));
       if (viewable) status.append(h('a.icon-btn', { href: api.fileUrl(row.job.id, 0, true), target: '_blank', rel: 'noopener', title: 'Open', 'aria-label': 'Open result' }, icon('eye')));
+      if (row.fromLink && row.upload) status.append(h('a.icon-btn', { href: api.uploadFileUrl(row.upload.id), download: '', title: `Download the original ${row.format.toUpperCase()}`, 'aria-label': 'Download original' }, icon('link')));
       status.append(h('a.btn.btn-sm.btn-primary', { href: api.downloadUrl(row.job.id), download: '' }, icon('download'), outs.length > 1 ? 'ZIP' : 'Download'));
       break;
     }
@@ -646,6 +650,7 @@ function adoptUploads(row, uploads) {
     target.fetchId = null;
     target.sourceUrl = null;
     target.error = null;
+    target.fromLink = true;
     if (state.preset && targetsOf(up.format).includes(state.preset)) target.target = state.preset;
   };
   fill(row, first);
