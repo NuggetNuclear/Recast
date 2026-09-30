@@ -47,9 +47,8 @@ async function convert({ input, from, to, o, outDir, baseName, signal }) {
   }
   if (to === 'html' && opt.bool(o.embed, true)) args.push(versionAtLeast(pandocVersion, 2, 19) ? '--embed-resources' : '--self-contained', '--standalone');
   if (to === 'html' || to === 'epub') {
-    const allowed = ['mathml', 'mathjax', 'katex'];
     const m = o.math || 'mathml';
-    if (allowed.includes(m)) args.push(`--${m}`);
+    if (m !== 'plain') args.push(`--${m}`);
   }
   if (opt.str(o.title).trim()) args.push('--metadata', `title=${o.title.trim()}`);
   else if (to === 'html' || to === 'epub') args.push('--metadata', `pagetitle=${baseName}`);
