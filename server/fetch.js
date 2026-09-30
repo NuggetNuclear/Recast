@@ -288,22 +288,32 @@ function filenameFrom(url, headers, type) {
   return safeName(path.basename(name), 'download');
 }
 
+const REDIRECT_STATUS = [301, 302, 303, 307, 308];
+
+/** GET with redirects followed by hand, so every hop is checked against the local-network guard. */
+async function fetchSafely(url, init, { assertUrl = assertSafeUrl } = {}) {
+  let current = await assertUrl(url);
+  let r;
+  for (let hops = 0; hops <= 5; hops++) {
+    r = await fetch(current, { ...init, redirect: 'manual', dispatcher: safeAgent });
+    if (!REDIRECT_STATUS.includes(r.status)) break;
+    const location = r.headers.get('location');
+    if (!location) break;
+    await r.body?.cancel().catch(() => {});
+    current = await assertUrl(new URL(location, current));
+  }
+  return { r, url: current };
+}
+
 async function downloadDirect(url, job, { rejectHtml }) {
   job.stage = 'Downloading';
   const signal = job.controller.signal;
   let r;
   try {
-    let current = await assertSafeUrl(url);
-    for (let redirects = 0; redirects <= 5; redirects++) {
-      r = await fetch(current, { signal, redirect: 'manual', headers: { 'user-agent': UA, accept: '*/*' }, dispatcher: safeAgent });
-      if (![301, 302, 303, 307, 308].includes(r.status)) break;
-      const location = r.headers.get('location');
-      if (!location) break;
-      await r.body?.cancel().catch(() => {});
-      current = await assertSafeUrl(new URL(location, current));
-    }
+    ({ r, url } = await fetchSafely(url, { signal, headers: { 'user-agent': UA, accept: '*/*' } }));
   } catch (e) {
     if (signal.aborted) throw new UserError(job.timedOut ? 'The download timed out' : 'Cancelled');
+    if (e.userFacing) throw e;
     throw new UserError(`Could not download the file: ${e.cause?.code || e.message}`);
   }
   if (!r.ok || !r.body) throw new UserError(`The server answered ${r.status}${r.statusText ? ` ${r.statusText}` : ''}`);
@@ -339,17 +349,16 @@ async function downloadDirect(url, job, { rejectHtml }) {
   return [filePath];
 }
 
-async function probeKind(url, signal) {
+export async function probeKind(url, signal, { assertUrl } = {}) {
   let r;
   try {
-    r = await fetch(url, {
-      redirect: 'manual',
+    ({ r, url } = await fetchSafely(url, {
       signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
       headers: { 'user-agent': UA, accept: '*/*', range: 'bytes=0-0' },
-      dispatcher: safeAgent,
-    });
+    }, { assertUrl }));
   } catch (e) {
     if (signal.aborted) throw new UserError('Cancelled');
+    if (e.userFacing) throw e;
     return 'unknown';
   }
   const type = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
