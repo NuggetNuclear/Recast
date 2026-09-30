@@ -15,8 +15,8 @@ export function notifyJob(job) {
   jobEvents.emit('update', job);
 }
 
-const uploads = new Map();
-const jobs = new Map();
+export const uploads = new Map();
+export const jobs = new Map();
 const queue = [];
 let running = 0;
 
@@ -32,7 +32,17 @@ export async function registerUpload({ id, filePath, name, size }) {
 
 export const getUpload = (id) => uploads.get(id);
 
+export function isUploadInUse(id) {
+  for (const j of jobs.values()) {
+    if (['queued', 'processing'].includes(j.status)) {
+      if (j.uploadId === id || j.uploadIds?.includes(id)) return true;
+    }
+  }
+  return false;
+}
+
 export async function deleteUpload(id) {
+  if (isUploadInUse(id)) return false;
   const up = uploads.get(id);
   if (!up) return false;
   uploads.delete(id);
@@ -261,8 +271,16 @@ async function runMerge(job, jobDir, signal) {
 
 export async function sweep() {
   const cutoff = Date.now() - config.retentionMinutes * 60 * 1000;
-  for (const [id, u] of uploads) if (u.createdAt < cutoff && ![...jobs.values()].some((j) => j.status === 'processing' && (j.uploadId === id || j.uploadIds?.includes(id)))) await deleteUpload(id);
-  for (const [id, j] of jobs) if ((j.finishedAt || j.createdAt) < cutoff && j.status !== 'processing') await deleteJob(id);
+  for (const [id, u] of uploads) {
+    if (u.createdAt < cutoff && !isUploadInUse(id)) {
+      await deleteUpload(id);
+    }
+  }
+  for (const [id, j] of jobs) {
+    if ((j.finishedAt || j.createdAt) < cutoff && j.status !== 'processing') {
+      await deleteJob(id);
+    }
+  }
 }
 
 export async function resetStorage() {

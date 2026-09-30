@@ -16,10 +16,10 @@ export class UserError extends Error {
  * Spawn a process and collect its output.
  * Rejects with a UserError carrying the stderr tail when the exit code is non-zero.
  */
-export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs, errorMessage, timeoutMessage, okCodes = [0], killGroup = false } = {}) {
+export function run(cmd, args, { cwd, signal, onStdout, onStderr, env, timeoutMs, errorMessage, timeoutMessage, okCodes = [0], killGroup = true } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new UserError('Cancelled'));
-    // A new process group lets us stop yt-dlp together with the ffmpeg it spawns.
+    // A new process group lets us stop tools together with any subprocesses they spawn.
     const detached = killGroup && process.platform !== 'win32';
     const child = spawn(cmd, args, { cwd, env: env ? { ...process.env, ...env } : process.env, windowsHide: true, detached });
     let stdout = '';

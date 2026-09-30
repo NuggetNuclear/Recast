@@ -5,11 +5,16 @@ import http from 'node:http';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { fetch } from 'undici';
+import path from 'node:path';
+import fsp from 'node:fs/promises';
 import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
 import { getEngine, validateStepOptions, validateEngineSchemaFields } from '../server/registry.js';
 import { pdfPageSchema } from '../server/engines/imagepdf.js';
 import { startFetch } from '../server/fetch.js';
-import { verifyHostAndAuth } from '../server/index.js';
+import { app, verifyHostAndAuth } from '../server/index.js';
+import * as store from '../server/jobs.js';
+import { run } from '../server/util.js';
+import { dirs } from '../server/config.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
   const privateIps = [
@@ -263,5 +268,102 @@ test('server spawns on random loopback port and responds to /api/health', async 
     child.kill();
   }
 });
+
+test('sweep and DELETE /api/uploads/:id protect uploads referenced by queued and processing jobs', async () => {
+  await fsp.mkdir(dirs.uploads, { recursive: true });
+  const dummyFile = path.join(dirs.uploads, 'test-protect-file.txt');
+  await fsp.writeFile(dummyFile, 'content for upload protection test');
+
+  const uploadId = '11111111-1111-4111-8111-111111111111';
+  await store.registerUpload({
+    id: uploadId,
+    filePath: dummyFile,
+    name: 'test-protect-file.txt',
+    size: 32,
+  });
+
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  try {
+    const jobId = '22222222-2222-4222-8222-222222222222';
+    // 1. Queued job references the upload: sweep must preserve it, DELETE must return 409
+    store.jobs.set(jobId, { id: jobId, status: 'queued', uploadId, createdAt: Date.now() });
+    store.uploads.get(uploadId).createdAt = Date.now() - 100_000_000; // simulate old upload
+
+    assert.equal(store.isUploadInUse(uploadId), true);
+    await store.sweep();
+    assert.ok(store.uploads.has(uploadId), 'sweep() must not delete upload used by queued job');
+
+    const delQueuedRes = await fetch(`http://127.0.0.1:${port}/api/uploads/${uploadId}`, { method: 'DELETE' });
+    assert.equal(delQueuedRes.status, 409);
+    const delQueuedBody = await delQueuedRes.json();
+    assert.match(delQueuedBody.error, /in use/i);
+    assert.ok(store.uploads.has(uploadId), 'DELETE must not remove upload while job is queued');
+
+    // 2. Processing job (with uploadIds list, as in merge jobs): sweep preserves, DELETE returns 409
+    store.jobs.get(jobId).status = 'processing';
+    delete store.jobs.get(jobId).uploadId;
+    store.jobs.get(jobId).uploadIds = [uploadId];
+
+    assert.equal(store.isUploadInUse(uploadId), true);
+    await store.sweep();
+    assert.ok(store.uploads.has(uploadId), 'sweep() must not delete upload used by processing job');
+
+    const delProcRes = await fetch(`http://127.0.0.1:${port}/api/uploads/${uploadId}`, { method: 'DELETE' });
+    assert.equal(delProcRes.status, 409);
+    assert.ok(store.uploads.has(uploadId));
+
+    // 3. Done job: upload is no longer in use, DELETE returns 200 and removes it
+    store.jobs.get(jobId).status = 'done';
+    assert.equal(store.isUploadInUse(uploadId), false);
+
+    const delDoneRes = await fetch(`http://127.0.0.1:${port}/api/uploads/${uploadId}`, { method: 'DELETE' });
+    assert.equal(delDoneRes.status, 200);
+    assert.equal(store.uploads.has(uploadId), false);
+
+    // 4. Repeated DELETE returns 404
+    const del404Res = await fetch(`http://127.0.0.1:${port}/api/uploads/${uploadId}`, { method: 'DELETE' });
+    assert.equal(del404Res.status, 404);
+
+    store.jobs.delete(jobId);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    await fsp.rm(dummyFile, { force: true }).catch(() => {});
+  }
+});
+
+test('run() terminates child process tree on abort and timeout', async () => {
+  // 1. Process tree terminates promptly on abort signal
+  const controller = new AbortController();
+  const startAbort = Date.now();
+  const pAbort = run(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 100);
+  await assert.rejects(pAbort, /Cancelled/);
+  assert.ok(Date.now() - startAbort < 4000, 'Process was not terminated promptly on abort');
+
+  // 2. Process tree terminates promptly on timeoutMs
+  const startTimeout = Date.now();
+  const pTimeout = run(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    timeoutMs: 150,
+  });
+  await assert.rejects(pTimeout, /timed out/);
+  assert.ok(Date.now() - startTimeout < 4000, 'Process was not terminated promptly on timeout');
+
+  // 3. Process tree with nested child process terminates promptly
+  const controllerTree = new AbortController();
+  const nestedScript = 'const { spawn } = require("child_process"); spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"]); setInterval(() => {}, 1000);';
+  const startTree = Date.now();
+  const pTree = run(process.execPath, ['-e', nestedScript], {
+    signal: controllerTree.signal,
+  });
+  setTimeout(() => controllerTree.abort(), 150);
+  await assert.rejects(pTree, /Cancelled/);
+  assert.ok(Date.now() - startTree < 4000, 'Nested process tree was not terminated promptly on abort');
+});
+
 
 

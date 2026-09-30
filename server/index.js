@@ -16,7 +16,7 @@ import { assertId, assertIndex, basicAuthValid, verifyHostAndAuth } from './secu
 
 export { verifyHostAndAuth };
 
-const app = express();
+export const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
 app.use((req, res, next) => {
@@ -119,7 +119,12 @@ app.get('/api/uploads/:id/file', (req, res) => {
 });
 
 app.delete('/api/uploads/:id', wrap(async (req, res) => {
-  await store.deleteUpload(assertId(req.params.id, 'upload id'));
+  const id = assertId(req.params.id, 'upload id');
+  if (store.isUploadInUse(id)) {
+    return res.status(409).json({ error: 'Cannot delete an upload that is currently in use by a queued or running job' });
+  }
+  const deleted = await store.deleteUpload(id);
+  if (!deleted) return res.status(404).json({ error: 'Upload not found' });
   res.json({ ok: true });
 }));
 
