@@ -438,7 +438,7 @@ test('docker healthcheck script authenticates against a password-protected serve
   const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, RECAST_AUTH_USER: 'probe', RECAST_AUTH_PASSWORD: 'secret' };
   const server = spawn(process.execPath, ['server/index.js'], { env, stdio: 'ignore' });
   const probe = (extraEnv) => new Promise((resolve) => {
-    const child = spawn(process.execPath, ['docker/healthcheck.js'], { env: { ...env, ...extraEnv }, stdio: 'ignore' });
+    const child = spawn(process.execPath, ['server/healthcheck.js'], { env: { ...env, ...extraEnv }, stdio: 'ignore' });
     child.on('close', resolve);
   });
   try {

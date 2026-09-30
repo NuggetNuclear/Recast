@@ -31,7 +31,6 @@ COPY server ./server
 COPY public ./public
 COPY test ./test
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-COPY docker/healthcheck.js /usr/local/bin/healthcheck.js
 RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data && chown -R node:node /app/data
 
 ENV NODE_ENV=production \
@@ -48,7 +47,7 @@ ENV NODE_ENV=production \
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD ["node", "/usr/local/bin/healthcheck.js"]
+  CMD ["node", "server/healthcheck.js"]
 
 ENTRYPOINT ["tini", "--", "entrypoint.sh"]
 CMD ["node", "--no-experimental-webstorage", "server/index.js"]
