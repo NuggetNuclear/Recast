@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { ZipArchive } from 'archiver';
 import sharp from 'sharp';
 import { tools } from '../server/tools.js';
 import image from '../server/engines/image.js';
@@ -12,7 +14,7 @@ import data from '../server/engines/data.js';
 import markup from '../server/engines/markup.js';
 import media from '../server/engines/media.js';
 import subtitle from '../server/engines/subtitle.js';
-import archive from '../server/engines/archive.js';
+import archive, { assertSafeExtractedDir } from '../server/engines/archive.js';
 
 async function withDir(fn) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'recast-test-'));
@@ -72,3 +74,151 @@ test('bundled archive conversion when 7-Zip is available', { skip: !tools.sevenZ
   const out = await archive.convert(ctx(input, 'txt', 'zip', dir, dir));
   assert.equal(path.extname(out[0]), '.zip');
 }));
+
+function createZip(filePath, entries) {
+  return new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(filePath);
+    const zip = new ZipArchive();
+    output.on('close', resolve);
+    zip.on('error', reject);
+    zip.pipe(output);
+    for (const [name, content] of Object.entries(entries)) {
+      zip.append(content, { name });
+    }
+    zip.finalize();
+  });
+}
+
+function makeCraftedZip(filename, content) {
+  const nameBuf = Buffer.from(filename, 'utf8');
+  const dataBuf = Buffer.from(content, 'utf8');
+
+  const lfh = Buffer.alloc(30 + nameBuf.length);
+  lfh.writeUInt32LE(0x04034b50, 0);
+  lfh.writeUInt16LE(20, 4);
+  lfh.writeUInt16LE(0, 6);
+  lfh.writeUInt16LE(0, 8);
+  lfh.writeUInt16LE(0, 10);
+  lfh.writeUInt16LE(0, 12);
+  lfh.writeUInt32LE(0, 14);
+  lfh.writeUInt32LE(dataBuf.length, 18);
+  lfh.writeUInt32LE(dataBuf.length, 22);
+  lfh.writeUInt16LE(nameBuf.length, 26);
+  lfh.writeUInt16LE(0, 28);
+  nameBuf.copy(lfh, 30);
+
+  const lfhOffset = 0;
+
+  const cdh = Buffer.alloc(46 + nameBuf.length);
+  cdh.writeUInt32LE(0x02014b50, 0);
+  cdh.writeUInt16LE(20, 4);
+  cdh.writeUInt16LE(20, 6);
+  cdh.writeUInt16LE(0, 8);
+  cdh.writeUInt16LE(0, 10);
+  cdh.writeUInt16LE(0, 12);
+  cdh.writeUInt16LE(0, 14);
+  cdh.writeUInt32LE(0, 16);
+  cdh.writeUInt32LE(dataBuf.length, 20);
+  cdh.writeUInt32LE(dataBuf.length, 24);
+  cdh.writeUInt16LE(nameBuf.length, 28);
+  cdh.writeUInt16LE(0, 30);
+  cdh.writeUInt16LE(0, 32);
+  cdh.writeUInt16LE(0, 34);
+  cdh.writeUInt16LE(0, 36);
+  cdh.writeUInt32LE(0, 38);
+  cdh.writeUInt32LE(lfhOffset, 42);
+  nameBuf.copy(cdh, 46);
+
+  const cdOffset = lfh.length + dataBuf.length;
+  const cdSize = cdh.length;
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(1, 8);
+  eocd.writeUInt16LE(1, 10);
+  eocd.writeUInt32LE(cdSize, 12);
+  eocd.writeUInt32LE(cdOffset, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([lfh, dataBuf, cdh, eocd]);
+}
+
+test('archive zip to tar round trip', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
+  const zipPath = path.join(dir, 'input.zip');
+  await createZip(zipPath, { 'hello.txt': 'Hello Recast' });
+  const outTar = await archive.convert(ctx(zipPath, 'zip', 'tar', dir, path.join(dir, 't1')));
+  assert.equal(path.extname(outTar[0]), '.tar');
+  assert.equal(fs.existsSync(outTar[0]), true);
+
+  const outZip = await archive.convert(ctx(outTar[0], 'tar', 'zip', dir, path.join(dir, 't2')));
+  assert.equal(path.extname(outZip[0]), '.zip');
+  assert.equal(fs.existsSync(outZip[0]), true);
+}));
+
+test('archive with zip-slip entry is rejected', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
+  const zipPath = path.join(dir, 'slip.zip');
+  const buf = makeCraftedZip('../slip.txt', 'evil payload');
+  await fsp.writeFile(zipPath, buf);
+  await assert.rejects(
+    archive.convert(ctx(zipPath, 'zip', 'tar', dir, path.join(dir, 't1'))),
+    /unsafe path|outside extraction directory/i
+  );
+}));
+
+test('archive exceeding file count cap is rejected', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
+  const zipPath = path.join(dir, 'many.zip');
+  await createZip(zipPath, {
+    'f1.txt': '1',
+    'f2.txt': '2',
+    'f3.txt': '3',
+    'f4.txt': '4',
+    'f5.txt': '5',
+  });
+  process.env.MAX_EXTRACT_FILES = '3';
+  try {
+    await assert.rejects(
+      archive.convert(ctx(zipPath, 'zip', 'tar', dir, path.join(dir, 't1'))),
+      /too many files/i
+    );
+  } finally {
+    delete process.env.MAX_EXTRACT_FILES;
+  }
+}));
+
+test('extracted archive containing symlink is rejected', async (t) => {
+  if (process.platform === 'win32') {
+    try {
+      await fsp.symlink('test-target', 'test-link');
+      await fsp.unlink('test-link');
+    } catch {
+      t.skip('Skipping symlink test: Windows requires administrative privileges or Developer Mode to create/extract symlinks');
+      return;
+    }
+  }
+  await withDir(async (dir) => {
+    const target = path.join(dir, 'target.txt');
+    await fsp.writeFile(target, 'target');
+    const link = path.join(dir, 'link.txt');
+    await fsp.symlink(target, link);
+    await assert.rejects(
+      assertSafeExtractedDir(dir),
+      /symbolic link/i
+    );
+  });
+});
+
+test('assertSafeExtractedDir rejects size limits', () => withDir(async (dir) => {
+  const file = path.join(dir, 'test.txt');
+  await fsp.writeFile(file, 'hello world content');
+  process.env.MAX_EXTRACT_MB = '0.000001';
+  try {
+    await assert.rejects(
+      assertSafeExtractedDir(dir),
+      /size exceeds limit/i
+    );
+  } finally {
+    delete process.env.MAX_EXTRACT_MB;
+  }
+}));
+

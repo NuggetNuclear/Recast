@@ -14,6 +14,8 @@ export const config = {
   // Uploaded and converted files are removed after this many minutes.
   retentionMinutes: num(process.env.RETENTION_MINUTES, 120),
   maxUploadBytes: num(process.env.MAX_UPLOAD_MB, 4096) * 1024 * 1024,
+  maxExtractBytes: num(process.env.MAX_EXTRACT_MB, num(process.env.MAX_UPLOAD_MB, 4096) * 4) * 1024 * 1024,
+  maxExtractFiles: num(process.env.MAX_EXTRACT_FILES, 10000),
   concurrency: num(process.env.CONCURRENCY, Math.max(2, Math.min(4, Math.floor(os.cpus().length / 3)))),
   jobTimeoutMs: num(process.env.JOB_TIMEOUT_MIN, 120) * 60 * 1000,
   maxPixels: num(process.env.MAX_IMAGE_PIXELS, 100_000_000),

@@ -1,6 +1,7 @@
 // Archives via 7-Zip: repack between formats, or compress any file.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { config } from '../config.js';
 import { f, group } from '../schema.js';
 import { tools, versionOf } from '../tools.js';
 import { run, UserError, opt, clamp, ensureDir } from '../util.js';
@@ -72,6 +73,58 @@ async function assertSafeArchive(input, password) {
   for (const line of entriesText.split(/\r?\n/)) if (line.startsWith('Path = ')) assertArchiveEntry(line.slice(7));
 }
 
+export async function assertSafeExtractedDir(dir) {
+  const realDir = await fsp.realpath(dir);
+  const maxBytes = process.env.MAX_EXTRACT_MB !== undefined && process.env.MAX_EXTRACT_MB !== ''
+    ? Number(process.env.MAX_EXTRACT_MB) * 1024 * 1024
+    : config.maxExtractBytes;
+  const maxFiles = process.env.MAX_EXTRACT_FILES !== undefined && process.env.MAX_EXTRACT_FILES !== ''
+    ? Number(process.env.MAX_EXTRACT_FILES)
+    : config.maxExtractFiles;
+
+  let totalFiles = 0;
+  let totalEntries = 0;
+  let totalBytes = 0;
+
+  async function walk(current) {
+    const entries = await fsp.readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      const stat = await fsp.lstat(fullPath);
+
+      if (stat.isSymbolicLink()) {
+        throw new UserError('Archive contains symbolic links');
+      }
+
+      const real = await fsp.realpath(fullPath);
+      const rel = path.relative(realDir, real);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new UserError('Archive entry is outside extraction directory');
+      }
+
+      totalEntries++;
+      if (totalEntries > maxFiles * 2) {
+        throw new UserError(`Archive contains too many entries (limit: ${maxFiles})`);
+      }
+
+      if (stat.isDirectory()) {
+        await walk(fullPath);
+      } else {
+        totalFiles++;
+        if (totalFiles > maxFiles) {
+          throw new UserError(`Archive contains too many files (limit: ${maxFiles})`);
+        }
+        totalBytes += stat.size;
+        if (totalBytes > maxBytes) {
+          throw new UserError(`Archive extracted size exceeds limit (${Math.round(maxBytes / 1024 / 1024)} MB)`);
+        }
+      }
+    }
+  }
+
+  await walk(realDir);
+}
+
 async function convert({ input, from, to, o, outDir, baseName, tmpDir, signal, progress, originalName }) {
   if (!tools.sevenZip) throw new UserError('7-Zip is not available');
   const out = path.join(outDir, `${baseName}.${to}`);
@@ -102,6 +155,7 @@ async function convert({ input, from, to, o, outDir, baseName, tmpDir, signal, p
       await sevenZip(['x', `-o${content}`, tarPath], { signal });
       await fsp.rm(tarPath, { force: true });
     }
+    await assertSafeExtractedDir(content);
   } else {
     await fsp.copyFile(input, path.join(content, originalName || path.basename(input)));
   }
