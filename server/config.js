@@ -19,6 +19,7 @@ export const config = {
   concurrency: num(process.env.CONCURRENCY, Math.max(2, Math.min(4, Math.floor(os.cpus().length / 3)))),
   jobTimeoutMs: num(process.env.JOB_TIMEOUT_MIN, 120) * 60 * 1000,
   maxPixels: num(process.env.MAX_IMAGE_PIXELS, 100_000_000),
+  allowUnauthenticated: process.env.RECAST_ALLOW_UNAUTHENTICATED === '1',
   authUser: process.env.RECAST_AUTH_USER || '',
   authPassword: process.env.RECAST_AUTH_PASSWORD || '',
 };

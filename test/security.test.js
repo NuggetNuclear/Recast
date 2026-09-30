@@ -189,6 +189,9 @@ test('startup validation refuses non-loopback hosts without auth and partial cre
   // 4. Starts on non-loopback with both creds
   assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', 'user', 'pass'));
   assert.doesNotThrow(() => verifyHostAndAuth('192.168.1.100', 'user', 'pass'));
+
+  // 5. Starts on non-loopback without creds when allowUnauthenticated is true
+  assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', '', '', true));
 });
 
 test('server spawns on random loopback port and responds to /api/health', async () => {

@@ -96,7 +96,13 @@ Tools are found on `PATH` or in their default install folders; you can also poin
 | `RECAST_AUTH_USER` | | Basic Auth username (required when `HOST` is not loopback) |
 | `RECAST_AUTH_PASSWORD` | | Basic Auth password; set together with the username |
 
-To access Recast from other devices on your local network (LAN), set `HOST=0.0.0.0` and configure both `RECAST_AUTH_USER` and `RECAST_AUTH_PASSWORD`. Recast refuses to bind to non-loopback interfaces without credentials.
+By default, Recast is for local use only. In `docker-compose.yml`, the port is mapped only to loopback (`127.0.0.1:3000:3000`) with `RECAST_ALLOW_UNAUTHENTICATED=1`, allowing zero-configuration local use.
+
+To expose Recast to your local network (LAN) instead:
+- **With Docker**: In `docker-compose.yml`, change the port mapping to `"3000:3000"` (or `"0.0.0.0:3000:3000"`), remove `RECAST_ALLOW_UNAUTHENTICATED: 1` (or set it to `0`), and configure both `RECAST_AUTH_USER` and `RECAST_AUTH_PASSWORD`.
+- **Without Docker**: Run with `HOST=0.0.0.0` and configure both `RECAST_AUTH_USER` and `RECAST_AUTH_PASSWORD`.
+
+Recast refuses to start on non-loopback interfaces without credentials unless `RECAST_ALLOW_UNAUTHENTICATED=1` is explicitly set.
 
 The data directory is wiped when the server starts.
 

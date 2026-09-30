@@ -84,4 +84,10 @@ Instala cualquiera de estos y haz clic en **Motores → Reescanear** (o reinicia
 | `RECAST_AUTH_USER` | | Usuario de Basic Auth (requerido si `HOST` no es loopback) |
 | `RECAST_AUTH_PASSWORD` | | Contraseña de Basic Auth; úsala junto al usuario |
 
-Para acceder a Recast desde otros dispositivos en tu red local (LAN), establece `HOST=0.0.0.0` y define tanto `RECAST_AUTH_USER` como `RECAST_AUTH_PASSWORD`. Recast rechazará iniciar en interfaces externas sin autenticación.
+Por defecto, Recast es solo para uso local. En `docker-compose.yml`, el puerto está mapeado únicamente a loopback (`127.0.0.1:3000:3000`) con `RECAST_ALLOW_UNAUTHENTICATED=1`, lo que permite su uso local sin configuración adicional.
+
+Para exponer Recast a tu red local (LAN):
+- **Con Docker**: En `docker-compose.yml`, cambia el mapeo de puertos a `"3000:3000"` (o `"0.0.0.0:3000:3000"`), elimina `RECAST_ALLOW_UNAUTHENTICATED: 1` (o establécelo en `0`), y define tanto `RECAST_AUTH_USER` como `RECAST_AUTH_PASSWORD`.
+- **Sin Docker**: Ejecuta con `HOST=0.0.0.0` y define tanto `RECAST_AUTH_USER` como `RECAST_AUTH_PASSWORD`.
+
+Recast rechazará iniciar en interfaces externas sin credenciales a menos que se defina explícitamente `RECAST_ALLOW_UNAUTHENTICATED=1`.

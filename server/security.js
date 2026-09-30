@@ -135,14 +135,14 @@ export function basicAuthValid(header, user, password) {
   return crypto.timingSafeEqual(a, b);
 }
 
-export function verifyHostAndAuth(host, user, password) {
+export function verifyHostAndAuth(host, user, password, allowUnauthenticated = process.env.RECAST_ALLOW_UNAUTHENTICATED === '1') {
   const isLoopback = ['127.0.0.1', '::1', 'localhost'].includes(String(host || '').toLowerCase().trim());
   const hasUser = Boolean(user);
   const hasPass = Boolean(password);
   if ((hasUser && !hasPass) || (!hasUser && hasPass)) {
     throw new Error('Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set when configuring authentication.');
   }
-  if (!isLoopback && (!hasUser || !hasPass)) {
+  if (!allowUnauthenticated && !isLoopback && (!hasUser || !hasPass)) {
     throw new Error(`Refusing to bind non-loopback host "${host}" without authentication. Set both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD to protect Recast on the network.`);
   }
 }

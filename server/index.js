@@ -281,7 +281,7 @@ app.use((err, req, res, next) => {
 
 // ---------- start
 async function main() {
-  verifyHostAndAuth(config.host, config.authUser, config.authPassword);
+  verifyHostAndAuth(config.host, config.authUser, config.authPassword, config.allowUnauthenticated);
   await store.resetStorage();
   await resetFetches();
   await ensureDir(dirs.profiles);
