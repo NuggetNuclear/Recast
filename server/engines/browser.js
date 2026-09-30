@@ -40,6 +40,9 @@ async function launch() {
     '--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions',
     '--disable-background-networking', '--disable-sync', '--disable-component-update', '--disable-default-apps',
     '--mute-audio', '--hide-scrollbars', '--no-pings', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    // Request interception does not see WebSockets, so also send every network connection (loopback included)
+    // to a proxy that does not exist. file:// pages are unaffected; the DevTools connection is made by us, not the page.
+    '--proxy-server=socks5://127.0.0.1:1', '--proxy-bypass-list=<-loopback>',
     // Containers usually lack the namespaces Chromium's sandbox needs, and have a tiny /dev/shm.
     ...(process.env.BROWSER_NO_SANDBOX === '1' ? ['--no-sandbox', '--disable-dev-shm-usage'] : []),
     'about:blank',

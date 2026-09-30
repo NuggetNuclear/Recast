@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
 import fs from 'node:fs';
 import os from 'node:os';
+import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ZipArchive } from 'archiver';
@@ -299,3 +300,31 @@ test('bundled browser html to pdf conversion', async (t) => {
 });
 
 
+
+test('browser rendering cannot reach the network, including WebSockets', async (t) => {
+  const detection = await browser.detect();
+  if (!detection.available) {
+    t.skip(`Skipping browser test: ${detection.note || 'No Chromium-based browser found'}`);
+    return;
+  }
+  const hits = [];
+  const server = http.createServer((req, res) => { hits.push(`HTTP ${req.url}`); res.end('ok'); });
+  server.on('upgrade', (req, socket) => { hits.push(`UPGRADE ${req.url}`); socket.destroy(); });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  try {
+    await withDir(async (dir) => {
+      const input = path.join(dir, 'probe.html');
+      await fsp.writeFile(input, `<h1>probe</h1><script>
+        try { new WebSocket('ws://127.0.0.1:${port}/ws'); } catch (e) {}
+        fetch('http://127.0.0.1:${port}/fetch').catch(() => {});
+        new Image().src = 'http://127.0.0.1:${port}/img';
+      </script>`);
+      await browser.convert({ ...ctx(input, 'html', 'pdf', dir, dir), o: { waitMs: 1500 } });
+    });
+  } finally {
+    await browser.shutdown();
+    await new Promise((resolve) => server.close(resolve));
+  }
+  assert.deepEqual(hits, [], 'the rendered page must not connect to local servers');
+});
