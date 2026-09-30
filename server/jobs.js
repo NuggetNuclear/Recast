@@ -270,6 +270,7 @@ async function runMerge(job, jobDir, signal) {
   const items = job.uploadIds.map((id) => uploads.get(id)).map((u) => ({ path: u.path, format: u.format, name: u.name }));
   const out = path.join(outDir, `${job.mergeName}.pdf`);
   await mergeToPdf(items, job.options[0] || {}, out, {
+    signal,
     tmpDir: path.join(jobDir, 'tmp'),
     progress: (p) => {
       job.progress = Math.min(0.99, p);

@@ -14,7 +14,7 @@ import { tools } from '../server/tools.js';
 import { run } from '../server/util.js';
 import { probe } from '../server/engines/ff.js';
 import image from '../server/engines/image.js';
-import imagepdf from '../server/engines/imagepdf.js';
+import imagepdf, { mergeToPdf } from '../server/engines/imagepdf.js';
 import data from '../server/engines/data.js';
 import markup from '../server/engines/markup.js';
 import media from '../server/engines/media.js';
@@ -323,3 +323,22 @@ test('the browser sandbox only allows the input file and its directory, ignoring
   const shouted = dir.toUpperCase();
   assert.equal(isAllowedFile(path.join(shouted, 'IMG', 'A.PNG'), input, dir), process.platform === 'win32');
 });
+
+test('cancelling a merge stops it between files and writes no output', () => withDir(async (dir) => {
+  const items = [];
+  for (let i = 0; i < 3; i++) {
+    const file = path.join(dir, `page${i}.png`);
+    await sharp({ create: { width: 4, height: 4, channels: 3, background: '#445566' } }).png().toFile(file);
+    items.push({ path: file, format: 'png', name: `page${i}.png` });
+  }
+  const out = path.join(dir, 'merged.pdf');
+  const controller = new AbortController();
+  let processed = 0;
+  await assert.rejects(
+    mergeToPdf(items, {}, out, { tmpDir: dir, signal: controller.signal, progress: () => { processed++; controller.abort(); } }),
+    /Cancelled/
+  );
+  assert.equal(processed, 1, 'no further file may be processed after the abort');
+  assert.equal(fs.existsSync(out), false, 'a cancelled merge must not leave a PDF behind');
+  await assert.rejects(mergeToPdf(items, {}, out, { tmpDir: dir, signal: AbortSignal.abort() }), /Cancelled/);
+}));

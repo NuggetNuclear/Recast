@@ -127,9 +127,12 @@ async function convert({ input, from, o, outDir, baseName, tmpDir, progress }) {
  * Merge several PDFs and/or images into a single PDF, in order.
  * items: [{ path, format, name }]
  */
-export async function mergeToPdf(items, o, outPath, { tmpDir, progress } = {}) {
+export async function mergeToPdf(items, o, outPath, { tmpDir, progress, signal } = {}) {
   const dst = new mupdf.PDFDocument();
+  // Nothing here is a child process, so cancelling means stopping between files.
+  const assertActive = () => { if (signal?.aborted) throw new UserError('Cancelled'); };
   for (let n = 0; n < items.length; n++) {
+    assertActive();
     const it = items[n];
     let bytes;
     if (it.format === 'pdf') bytes = await fsp.readFile(it.path);
@@ -149,6 +152,7 @@ export async function mergeToPdf(items, o, outPath, { tmpDir, progress } = {}) {
     }
     progress?.((n + 1) / items.length * 0.9);
   }
+  assertActive();
   if (opt.str(o.title).trim()) dst.setMetaData('info:Title', o.title.trim());
   if (opt.str(o.author).trim()) dst.setMetaData('info:Author', o.author.trim());
   const buf = dst.saveToBuffer('garbage=compact,compress,compress-fonts');
