@@ -11,6 +11,7 @@ import * as store from './jobs.js';
 import { tools } from './tools.js';
 import { run, UserError, ensureDir, rmrf, fileSize, safeName, stripExt } from './util.js';
 import { assertSafeUrl, safeAgent } from './security.js';
+import { fetch } from 'undici';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const PREFERENCES = new Set(['auto', 'best', '1080', '720', '480', 'audio']);
