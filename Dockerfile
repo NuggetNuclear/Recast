@@ -29,6 +29,7 @@ RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
 COPY server ./server
 COPY public ./public
+COPY test ./test
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /app/data && chown -R node:node /app/data
 

@@ -203,36 +203,36 @@ test('engine option schemas are enforced server-side', () => {
 test('startup validation refuses non-loopback hosts without auth and partial credentials', () => {
   // 1. Refuses non-loopback host with no creds
   assert.throws(
-    () => verifyHostAndAuth('0.0.0.0', '', ''),
+    () => verifyHostAndAuth('0.0.0.0', '', '', false),
     /Refusing to bind non-loopback host/
   );
   assert.throws(
-    () => verifyHostAndAuth('192.168.1.100', '', ''),
+    () => verifyHostAndAuth('192.168.1.100', '', '', false),
     /Refusing to bind non-loopback host/
   );
 
   // 2. Refuses with only one credential set
   assert.throws(
-    () => verifyHostAndAuth('127.0.0.1', 'user', ''),
+    () => verifyHostAndAuth('127.0.0.1', 'user', '', false),
     /Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set/
   );
   assert.throws(
-    () => verifyHostAndAuth('127.0.0.1', '', 'pass'),
+    () => verifyHostAndAuth('127.0.0.1', '', 'pass', false),
     /Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set/
   );
   assert.throws(
-    () => verifyHostAndAuth('0.0.0.0', 'user', ''),
+    () => verifyHostAndAuth('0.0.0.0', 'user', '', false),
     /Both RECAST_AUTH_USER and RECAST_AUTH_PASSWORD must be set/
   );
 
   // 3. Starts on loopback with no creds
-  assert.doesNotThrow(() => verifyHostAndAuth('127.0.0.1', '', ''));
-  assert.doesNotThrow(() => verifyHostAndAuth('localhost', '', ''));
-  assert.doesNotThrow(() => verifyHostAndAuth('::1', '', ''));
+  assert.doesNotThrow(() => verifyHostAndAuth('127.0.0.1', '', '', false));
+  assert.doesNotThrow(() => verifyHostAndAuth('localhost', '', '', false));
+  assert.doesNotThrow(() => verifyHostAndAuth('::1', '', '', false));
 
   // 4. Starts on non-loopback with both creds
-  assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', 'user', 'pass'));
-  assert.doesNotThrow(() => verifyHostAndAuth('192.168.1.100', 'user', 'pass'));
+  assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', 'user', 'pass', false));
+  assert.doesNotThrow(() => verifyHostAndAuth('192.168.1.100', 'user', 'pass', false));
 
   // 5. Starts on non-loopback without creds when allowUnauthenticated is true
   assert.doesNotThrow(() => verifyHostAndAuth('0.0.0.0', '', '', true));

@@ -22,6 +22,7 @@ services:
     volumes:
       - ./server:/app/server
       - ./public:/app/public
+      - ./test:/app/test
       - recast-data:/app/data
       - ./cookies:/cookies:ro
     shm_size: 1gb
