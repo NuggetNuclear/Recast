@@ -166,7 +166,7 @@ yt-dlp is registered as an engine so it shows up next to LibreOffice and Pandoc,
 
 When the download finishes, each kept file is moved into its own upload directory and probed. A playlist can therefore become many rows. The fetch directory is then deleted. If publishing fails part way, the uploads already registered are deleted too.
 
-Cancel, removing the row, or the job timeout aborts the controller. yt-dlp is started in its own process group (`detached` on Linux, `taskkill /T` on Windows) so the ffmpeg it spawned dies with it. Other engines are not detached; ffmpeg there is the child process itself.
+Cancel, removing the row, or the job timeout aborts the controller. Every external tool started through `run()` gets its own process group (`detached` on Linux and macOS, `taskkill /T` on Windows), so the ffmpeg that yt-dlp spawned, or the `soffice.bin` behind `soffice`, dies with it. Because those groups no longer receive the terminal's Ctrl+C, the server stops them itself: on SIGINT, SIGTERM, SIGHUP or SIGBREAK it aborts every job and download, kills whatever `run()` still tracks, closes the headless browser (at most five seconds), and exits. An `exit` handler repeats the kill as a last resort.
 
 The choices, the flag quirks, and what was observed against a real YouTube link are written up in [decisions](decisions.md).
 
@@ -178,7 +178,8 @@ The choices, the flag quirks, and what was observed against a real YouTube link 
 | `POST` | `/api/engines/rescan` | Re-locate binaries, re-run `detect`, rebuild the graph, return meta |
 | `POST` | `/api/uploads` | Multipart field `file`. Optional `x-file-name` header (percent-encoded) because multipart filenames arrive as latin1. |
 | `GET` | `/api/uploads/:id` | One upload |
-| `DELETE` | `/api/uploads/:id` | Delete the upload and its directory |
+| `GET` | `/api/uploads/:id/file` | The upload as-is (`?inline=1` for a preview) |
+| `DELETE` | `/api/uploads/:id` | Delete the upload and its directory. `409` while a queued or running job uses it. |
 | `POST` | `/api/uploads/url` | `{ url, preference?, playlist?, subtitles? }` → `202` fetch object |
 | `GET` | `/api/fetches/:id` | `{ id, status, progress, stage, error, details, uploads }`. `uploads` is empty until `status` is `done`. |
 | `POST` | `/api/fetches/:id/cancel` | Abort a running download |
@@ -187,6 +188,7 @@ The choices, the flag quirks, and what was observed against a real YouTube link 
 | `POST` | `/api/jobs` | `{ uploadId, to, options }` → job |
 | `POST` | `/api/merge` | `{ uploadIds, options, name }` → job |
 | `GET` | `/api/jobs?ids=a,b` | Many jobs. Unknown ids are omitted. |
+| `GET` | `/api/jobs/events?ids=a,b` | Server-sent events with job updates (the page uses this instead of polling when it can) |
 | `GET` | `/api/jobs/:id` | One job |
 | `POST` | `/api/jobs/:id/cancel` | Abort a queued or running job |
 | `DELETE` | `/api/jobs/:id` | Drop the job and its output directory |
@@ -195,7 +197,7 @@ The choices, the flag quirks, and what was observed against a real YouTube link 
 | `GET` | `/api/download?jobs=a,b` | Every finished result in those jobs, as one zip |
 | `GET` | `/api/health` | `{ ok, uploads, jobs, running, queued }` |
 
-Job `status` is `queued`, `processing`, `done`, `error`, or `cancelled`. Fetch `status` is `working`, `done`, `error`, or `cancelled`. `preference` is `auto`, `best`, `1080`, `720`, `480`, or `audio`. Unknown preference values become `auto`. `playlist` and `subtitles` count only when they are JSON `true`.
+Job `status` is `queued`, `processing`, `done`, `error`, or `cancelled`. Fetch `status` is `working`, `done`, `error`, or `cancelled`. `preference` is `auto`, `best`, `1080`, `720`, `480`, or `audio`. An unknown `preference` is rejected with a 400 (`Invalid preference`). `playlist` and `subtitles` count only when they are JSON `true`.
 
 Errors are `{ error, details? }` with status 400 for a `UserError`, 413 for an upload over the limit, 404 when the id is gone.
 

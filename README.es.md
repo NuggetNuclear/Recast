@@ -80,7 +80,9 @@ Instala cualquiera de estos y haz clic en **Motores → Reescanear** (o reinicia
 | `JOB_TIMEOUT_MIN` | `120` | Tiempo límite por conversión o descarga |
 | `YTDLP_PATH` | | Ruta al ejecutable yt-dlp si no está en `PATH` |
 | `YTDLP_COOKIES` | | Archivo `cookies.txt` exportado para sitios con inicio de sesión |
-| `MAX_IMAGE_PIXELS` | `100000000` | Máximo de píxeles de imagen decodificados por archivo |
+| `MAX_IMAGE_PIXELS` | `100000000` | Máximo de píxeles de imagen decodificados por archivo. Las imágenes mayores fallan con un mensaje que nombra esta variable. |
+| `MAX_EXTRACT_MB` | 4 × `MAX_UPLOAD_MB` | Tamaño total máximo de un archivo comprimido una vez extraído |
+| `MAX_EXTRACT_FILES` | `10000` | Número máximo de archivos en un archivo comprimido extraído |
 | `RECAST_AUTH_USER` | | Usuario de Basic Auth (requerido si `HOST` no es loopback) |
 | `RECAST_AUTH_PASSWORD` | | Contraseña de Basic Auth; úsala junto al usuario |
 
