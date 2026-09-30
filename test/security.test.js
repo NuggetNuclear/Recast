@@ -484,3 +484,11 @@ test('with credentials configured, every route including health and static files
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('an out-of-range value in a field the user cannot see does not block the job', () => {
+  const schema = getEngine('browser').schema({ from: 'html', to: 'pdf' });
+  // paperW belongs to the "Custom size" paper choice; it is hidden for A4 but the form keeps its value.
+  assert.deepEqual(validateStepOptions({ paper: 'A4', paperW: 10 }, schema), { paper: 'A4' });
+  // The same value is still rejected when the field is in use.
+  assert.throws(() => validateStepOptions({ paper: 'custom', paperW: 10 }, schema), /at least 20/);
+});

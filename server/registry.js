@@ -226,6 +226,18 @@ export function validateAllEngineSchemas() {
   }
 }
 
+/** Same rules as form.js: is the field shown, given the values entered so far? */
+function isVisible(field, values, fieldMap) {
+  if (!field.showIf) return true;
+  return Object.entries(field.showIf).every(([k, cond]) => {
+    const v = k in values ? values[k] : fieldMap.get(k)?.default;
+    if (Array.isArray(cond)) return cond.some((c) => (typeof c === 'boolean' ? !!v === c : String(v ?? '') === String(c)));
+    if (cond && Array.isArray(cond.not)) return !cond.not.some((c) => String(v ?? '') === String(c));
+    if (cond && cond.truthy) return !!v;
+    return true;
+  });
+}
+
 export function validateStepOptions(rawOptions, groups, engineId) {
   if (!rawOptions || typeof rawOptions !== 'object') return {};
   const fieldMap = new Map();
@@ -245,72 +257,78 @@ export function validateStepOptions(rawOptions, groups, engineId) {
   for (const [key, val] of Object.entries(rawOptions)) {
     const field = fieldMap.get(key);
     if (!field) continue;
-    if (val === undefined || val === null || val === '') {
-      if (field.type === 'select') {
-        const matched = field.options.find((o) => o.value === '' || o.value === null || o.value === undefined);
-        if (matched) validated[key] = matched.value;
+    try {
+      if (val === undefined || val === null || val === '') {
+        if (field.type === 'select') {
+          const matched = field.options.find((o) => o.value === '' || o.value === null || o.value === undefined);
+          if (matched) validated[key] = matched.value;
+        }
+        continue;
       }
-      continue;
-    }
 
-    switch (field.type) {
-      case 'select': {
-        const matched = field.options.find((o) => o.value === val || String(o.value) === String(val));
-        if (!matched) {
-          throw new UserError(`Invalid choice for ${field.key}: "${val}"`);
-        }
-        validated[key] = matched.value;
-        break;
-      }
-      case 'number':
-      case 'range': {
-        const n = typeof val === 'number' ? val : Number(val);
-        if (!Number.isFinite(n)) {
-          throw new UserError(`Invalid number for ${field.key}`);
-        }
-        if (field.min !== undefined && n < field.min) {
-          throw new UserError(`Value for ${field.key} must be at least ${field.min}`);
-        }
-        if (field.max !== undefined && n > field.max) {
-          throw new UserError(`Value for ${field.key} must be at most ${field.max}`);
-        }
-        validated[key] = n;
-        break;
-      }
-      case 'toggle': {
-        if (typeof val !== 'boolean') {
-          throw new UserError(`Invalid boolean for ${field.key}`);
-        }
-        validated[key] = val;
-        break;
-      }
-      case 'text':
-      case 'textarea':
-      case 'color':
-      case 'time': {
-        if (typeof val !== 'string' || val.includes('\u0000') || val.length > 4096) {
-          throw new UserError(`Invalid text for ${field.key}`);
-        }
-        validated[key] = val;
-        break;
-      }
-      case 'multi': {
-        if (!Array.isArray(val)) {
-          throw new UserError(`Invalid array for ${field.key}`);
-        }
-        const result = [];
-        for (const item of val) {
-          const matched = field.options.find((o) => o.value === item || String(o.value) === String(item));
+      switch (field.type) {
+        case 'select': {
+          const matched = field.options.find((o) => o.value === val || String(o.value) === String(val));
           if (!matched) {
-            throw new UserError(`Invalid choice for ${field.key}: "${item}"`);
+            throw new UserError(`Invalid choice for ${field.key}: "${val}"`);
           }
-          result.push(matched.value);
+          validated[key] = matched.value;
+          break;
         }
-        validated[key] = result;
-        break;
+        case 'number':
+        case 'range': {
+          const n = typeof val === 'number' ? val : Number(val);
+          if (!Number.isFinite(n)) {
+            throw new UserError(`Invalid number for ${field.key}`);
+          }
+          if (field.min !== undefined && n < field.min) {
+            throw new UserError(`Value for ${field.key} must be at least ${field.min}`);
+          }
+          if (field.max !== undefined && n > field.max) {
+            throw new UserError(`Value for ${field.key} must be at most ${field.max}`);
+          }
+          validated[key] = n;
+          break;
+        }
+        case 'toggle': {
+          if (typeof val !== 'boolean') {
+            throw new UserError(`Invalid boolean for ${field.key}`);
+          }
+          validated[key] = val;
+          break;
+        }
+        case 'text':
+        case 'textarea':
+        case 'color':
+        case 'time': {
+          if (typeof val !== 'string' || val.includes('\u0000') || val.length > 4096) {
+            throw new UserError(`Invalid text for ${field.key}`);
+          }
+          validated[key] = val;
+          break;
+        }
+        case 'multi': {
+          if (!Array.isArray(val)) {
+            throw new UserError(`Invalid array for ${field.key}`);
+          }
+          const result = [];
+          for (const item of val) {
+            const matched = field.options.find((o) => o.value === item || String(o.value) === String(item));
+            if (!matched) {
+              throw new UserError(`Invalid choice for ${field.key}: "${item}"`);
+            }
+            result.push(matched.value);
+          }
+          validated[key] = result;
+          break;
+        }
+        default:
+          throw new Error(`Unknown field type "${field.type}" in engine "${engineId || 'unknown'}"`);
       }
-      default:
-        throw new Error(`Unknown field type "${field.type}" in engine "${engineId || 'unknown'}"`);
+    } catch (e) {
+      // A value the user can no longer see (its showIf is not met) must not block the job; the engine ignores it anyway.
+      if (e.userFacing && !isVisible(field, rawOptions, fieldMap)) continue;
+      throw e;
     }
   }
   return validated;
