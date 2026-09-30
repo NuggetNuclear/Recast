@@ -474,6 +474,9 @@ test('with credentials configured, every route including health and static files
     for (const url of ['/api/health', '/', '/js/app.js']) {
       assert.equal((await fetch(base + url, { headers: good })).status, 200, `${url} with credentials`);
     }
+    // Authentication comes before body parsing: an anonymous client must not get its JSON parsed at all.
+    const anonymous = await fetch(`${base}/api/jobs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{not json' });
+    assert.equal(anonymous.status, 401);
   } finally {
     config.authUser = previous.user;
     config.authPassword = previous.password;

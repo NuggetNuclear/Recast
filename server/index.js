@@ -18,7 +18,7 @@ export { verifyHostAndAuth };
 
 export const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '2mb' }));
+// Authenticate before reading any request body.
 app.use((req, res, next) => {
   if (config.authUser && config.authPassword) {
     if (!basicAuthValid(req.get('authorization'), config.authUser, config.authPassword)) {
@@ -28,6 +28,7 @@ app.use((req, res, next) => {
   }
   return next();
 });
+app.use(express.json({ limit: '2mb' }));
 
 // ---------- static assets
 app.use(express.static(path.join(ROOT, 'public'), { extensions: ['html'], maxAge: 0 }));
