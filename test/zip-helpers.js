@@ -70,3 +70,27 @@ export function makeCraftedZip(filename, content) {
 
   return Buffer.concat([lfh, dataBuf, cdh, eocd]);
 }
+
+/** A minimal POSIX tar holding one regular file and one symlink pointing at `target`. */
+export function makeTarWithSymlink(linkName, target) {
+  const header = (name, size, type, linkname = '') => {
+    const h = Buffer.alloc(512);
+    h.write(name, 0, 100, 'utf8');
+    h.write('0000644\0', 100, 8, 'latin1');
+    h.write('0000000\0', 108, 8, 'latin1');
+    h.write('0000000\0', 116, 8, 'latin1');
+    h.write(`${size.toString(8).padStart(11, '0')}\0`, 124, 12, 'latin1');
+    h.write('00000000000\0', 136, 12, 'latin1');
+    h.write('        ', 148, 8, 'latin1');
+    h.write(type, 156, 1, 'latin1');
+    h.write(linkname, 157, 100, 'utf8');
+    h.write('ustar\0', 257, 6, 'latin1');
+    h.write('00', 263, 2, 'latin1');
+    const sum = [...h].reduce((a, b) => a + b, 0);
+    h.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'latin1');
+    return h;
+  };
+  const body = Buffer.from('plain file');
+  const padded = Buffer.concat([body, Buffer.alloc(512 - body.length)]);
+  return Buffer.concat([header('note.txt', body.length, '0'), padded, header(linkName, 0, '2', target), Buffer.alloc(1024)]);
+}

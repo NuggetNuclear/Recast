@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { createRequire } from 'node:module';
-import { createZip, makeCraftedZip } from './zip-helpers.js';
+import { createZip, makeCraftedZip, makeTarWithSymlink } from './zip-helpers.js';
 import { tools } from '../server/tools.js';
 import { run } from '../server/util.js';
 import { probe } from '../server/engines/ff.js';
@@ -301,4 +301,14 @@ test('assertSafeExtractedDir accepts names that merely start with two dots', () 
   await fsp.mkdir(path.join(dir, '..cache'));
   await fsp.writeFile(path.join(dir, '..cache', '..notes.txt'), 'legitimate file names can start with ..');
   await assert.doesNotReject(assertSafeExtractedDir(dir));
+}));
+
+test('extracting an archive that contains a symlink is rejected', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
+  const tarPath = path.join(dir, 'link.tar');
+  await fsp.writeFile(tarPath, makeTarWithSymlink('passwd-link', '/etc/passwd'));
+  await assert.rejects(
+    archive.convert(ctx(tarPath, 'tar', 'zip', dir, path.join(dir, 't1'))),
+    // Windows 7-Zip cannot create the link at all and fails the extraction itself; elsewhere our own check must catch it.
+    process.platform === 'win32' ? /symbolic link|could not process/i : /symbolic link/i
+  );
 }));
