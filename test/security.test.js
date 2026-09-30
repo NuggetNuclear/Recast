@@ -244,8 +244,10 @@ test('server spawns on random loopback port and responds to /api/health', async 
   const port = s.address().port;
   await new Promise((resolve) => s.close(resolve));
 
+  // The server wipes its data directory on start, so never point it at the real one.
+  const dataDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'recast-spawn-'));
   const child = spawn(process.execPath, ['server/index.js'], {
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', RECAST_AUTH_USER: '', RECAST_AUTH_PASSWORD: '' },
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, RECAST_AUTH_USER: '', RECAST_AUTH_PASSWORD: '' },
     stdio: 'pipe',
   });
 
@@ -267,15 +269,19 @@ test('server spawns on random loopback port and responds to /api/health', async 
     assert.equal(body?.ok, true);
   } finally {
     child.kill();
+    await new Promise((resolve) => (child.exitCode === null ? child.once('exit', resolve) : resolve()));
+    await fsp.rm(dataDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
 test('sweep and DELETE /api/uploads/:id protect uploads referenced by queued and processing jobs', async () => {
-  await fsp.mkdir(dirs.uploads, { recursive: true });
-  const dummyFile = path.join(dirs.uploads, 'test-protect-file.txt');
+  // Same layout as a real upload (uploads/<id>/<name>): deleting an upload removes its directory.
+  const uploadId = '11111111-1111-4111-8111-111111111111';
+  const uploadDir = path.join(dirs.uploads, uploadId);
+  await fsp.mkdir(uploadDir, { recursive: true });
+  const dummyFile = path.join(uploadDir, 'test-protect-file.txt');
   await fsp.writeFile(dummyFile, 'content for upload protection test');
 
-  const uploadId = '11111111-1111-4111-8111-111111111111';
   await store.registerUpload({
     id: uploadId,
     filePath: dummyFile,
@@ -331,7 +337,7 @@ test('sweep and DELETE /api/uploads/:id protect uploads referenced by queued and
     store.jobs.delete(jobId);
   } finally {
     await new Promise((resolve) => server.close(resolve));
-    await fsp.rm(dummyFile, { force: true }).catch(() => {});
+    await fsp.rm(uploadDir, { recursive: true, force: true }).catch(() => {});
   }
 });
 
