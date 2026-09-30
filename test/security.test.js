@@ -408,3 +408,29 @@ test('abortAllJobs() aborts processing jobs and cancels queued ones', () => {
     store.jobs.delete(waiting.id);
   }
 });
+
+test('docker healthcheck script authenticates against a password-protected server', async () => {
+  const s = net.createServer();
+  await new Promise((resolve) => s.listen(0, '127.0.0.1', resolve));
+  const port = s.address().port;
+  await new Promise((resolve) => s.close(resolve));
+  const dataDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'recast-health-'));
+  const env = { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: dataDir, RECAST_AUTH_USER: 'probe', RECAST_AUTH_PASSWORD: 'secret' };
+  const server = spawn(process.execPath, ['server/index.js'], { env, stdio: 'ignore' });
+  const probe = (extraEnv) => new Promise((resolve) => {
+    const child = spawn(process.execPath, ['docker/healthcheck.js'], { env: { ...env, ...extraEnv }, stdio: 'ignore' });
+    child.on('close', resolve);
+  });
+  try {
+    let code = 1;
+    for (let i = 0; i < 50 && code !== 0; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      code = await probe({});
+    }
+    assert.equal(code, 0, 'healthcheck must pass when credentials are configured');
+    assert.notEqual(await probe({ RECAST_AUTH_PASSWORD: 'wrong' }), 0, 'healthcheck must fail with wrong credentials');
+  } finally {
+    server.kill();
+    await fsp.rm(dataDir, { recursive: true, force: true }).catch(() => {});
+  }
+});
