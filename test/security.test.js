@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress } from '../server/security.js';
+import nodeDns from 'node:dns';
+import http from 'node:http';
+import { fetch } from 'undici';
+import { assertArchiveEntry, assertId, assertIndex, assertSafeUrl, basicAuthValid, isPrivateAddress, safeAgent } from '../server/security.js';
 
 test('SSRF guard rejects private and loopback destinations', async () => {
   const privateIps = [
@@ -80,4 +83,45 @@ test('basic auth is opt-in and constant-time comparable', () => {
   assert.equal(basicAuthValid(header, 'alice', 'secret'), true);
   assert.equal(basicAuthValid(header, 'alice', 'wrong'), false);
   assert.equal(basicAuthValid(header, '', ''), false);
+});
+
+test('safeAgent blocks DNS rebinding at connect time', async () => {
+  const originalLookup = nodeDns.lookup;
+  // Simulates hostname that resolves to 127.0.0.1 at connect time
+  nodeDns.lookup = function(h, o, cb) {
+    if (typeof o === 'function') { cb = o; o = {}; }
+    cb(null, [{ address: '127.0.0.1', family: 4 }]);
+  };
+  try {
+    await assert.rejects(
+      fetch('http://rebind-attack.test', { dispatcher: safeAgent }),
+      /fetch failed/
+    );
+  } finally {
+    nodeDns.lookup = originalLookup;
+  }
+});
+
+test('redirect whose Location points at a private IP is rejected', async () => {
+  const server = http.createServer((req, res) => {
+    res.writeHead(302, { Location: 'http://192.168.1.1/secret' });
+    res.end();
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  try {
+    let current = new URL(`http://127.0.0.1:${port}/redirect`);
+    await assert.rejects(async () => {
+      for (let i = 0; i <= 5; i++) {
+        const r = await fetch(current, { redirect: 'manual', dispatcher: safeAgent });
+        if ([301, 302, 303, 307, 308].includes(r.status)) {
+          const loc = r.headers.get('location');
+          current = await assertSafeUrl(new URL(loc, current));
+        }
+      }
+    }, /Local network URLs are not allowed/);
+  } finally {
+    server.close();
+  }
 });

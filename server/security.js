@@ -1,7 +1,9 @@
+import nodeDns from 'node:dns';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { Agent } from 'undici';
 import { UserError } from './util.js';
 
 const blockList = new net.BlockList();
@@ -51,6 +53,26 @@ export function isPrivateAddress(address) {
   if (ipType === 6) return blockList.check(norm, 'ipv6');
   return true;
 }
+
+export const safeAgent = new Agent({
+  connect: {
+    lookup(hostname, options, callback) {
+      nodeDns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
+        if (err) return callback(err);
+        if (!addresses?.length || addresses.some((entry) => isPrivateAddress(entry.address))) {
+          const blockErr = new Error('Local network URLs are not allowed');
+          blockErr.code = 'ENOTFOUND';
+          return callback(blockErr);
+        }
+        if (options?.all) {
+          callback(null, addresses);
+        } else {
+          callback(null, addresses[0].address, addresses[0].family);
+        }
+      });
+    },
+  },
+});
 
 export async function assertSafeUrl(raw, { lookup = dns.lookup } = {}) {
   let url;

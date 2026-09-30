@@ -10,7 +10,7 @@ import { config, dirs } from './config.js';
 import * as store from './jobs.js';
 import { tools } from './tools.js';
 import { run, UserError, ensureDir, rmrf, fileSize, safeName, stripExt } from './util.js';
-import { assertSafeUrl } from './security.js';
+import { assertSafeUrl, safeAgent } from './security.js';
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const PREFERENCES = new Set(['auto', 'best', '1080', '720', '480', 'audio']);
@@ -294,7 +294,7 @@ async function downloadDirect(url, job, { rejectHtml }) {
   try {
     let current = await assertSafeUrl(url);
     for (let redirects = 0; redirects <= 5; redirects++) {
-      r = await fetch(current, { signal, redirect: 'manual', headers: { 'user-agent': UA, accept: '*/*' } });
+      r = await fetch(current, { signal, redirect: 'manual', headers: { 'user-agent': UA, accept: '*/*' }, dispatcher: safeAgent });
       if (![301, 302, 303, 307, 308].includes(r.status)) break;
       const location = r.headers.get('location');
       if (!location) break;
@@ -345,6 +345,7 @@ async function probeKind(url, signal) {
       redirect: 'manual',
       signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
       headers: { 'user-agent': UA, accept: '*/*', range: 'bytes=0-0' },
+      dispatcher: safeAgent,
     });
   } catch (e) {
     if (signal.aborted) throw new UserError('Cancelled');
