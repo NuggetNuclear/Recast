@@ -1,4 +1,4 @@
-// Uploads, conversion jobs, the work queue and periodic clean-up.
+import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -7,6 +7,13 @@ import { detectFormat } from './formats.js';
 import { findRoute, getEngine, probeFile } from './registry.js';
 import { mergeToPdf } from './engines/imagepdf.js';
 import { UserError, ensureDir, rmrf, fileSize, safeName, stripExt } from './util.js';
+
+export const jobEvents = new EventEmitter();
+jobEvents.setMaxListeners(200);
+
+export function notifyJob(job) {
+  jobEvents.emit('update', job);
+}
 
 const uploads = new Map();
 const jobs = new Map();
@@ -111,11 +118,13 @@ export function cancelJob(id) {
     j.status = 'cancelled';
     j.stage = 'Cancelled';
   } else if (j.status === 'processing') j.controller?.abort();
+  notifyJob(j);
   return true;
 }
 
 function enqueue(job) {
   queue.push(job.id);
+  notifyJob(job);
   pump();
 }
 
@@ -136,6 +145,7 @@ const STAGE = { image: 'Processing image', media: 'Encoding', subtitle: 'Convert
 async function run(job) {
   job.status = 'processing';
   job.startedAt = Date.now();
+  notifyJob(job);
   job.controller = new AbortController();
   const timer = setTimeout(() => job.controller.abort(), config.jobTimeoutMs);
   const signal = job.controller.signal;
@@ -148,12 +158,14 @@ async function run(job) {
     job.status = 'done';
     job.progress = 1;
     job.stage = 'Done';
+    notifyJob(job);
   } catch (err) {
     const cancelled = signal.aborted && Date.now() - job.startedAt < config.jobTimeoutMs;
     job.status = cancelled ? 'cancelled' : 'error';
     job.stage = cancelled ? 'Cancelled' : 'Failed';
     job.error = cancelled ? 'Cancelled' : err.userFacing ? err.message : 'Unexpected error during conversion';
     job.details = err.userFacing ? err.details || null : String(err.stack || err.message || err).split('\n').slice(0, 6).join('\n');
+    notifyJob(job);
     if (!err.userFacing) console.error(`[job ${job.id}]`, err);
   } finally {
     clearTimeout(timer);
@@ -173,6 +185,7 @@ async function runConvert(job, jobDir, signal) {
     const outDir = await ensureDir(path.join(jobDir, i === n - 1 ? 'out' : `step${i}`));
     const produced = [];
     job.stage = n > 1 ? `${STAGE[engine.id] || 'Converting'} · step ${i + 1}/${n}` : STAGE[engine.id] || 'Converting';
+    notifyJob(job);
     for (let k = 0; k < files.length; k++) {
       if (signal.aborted) throw new UserError('Cancelled');
       const file = files[k];
@@ -190,7 +203,11 @@ async function runConvert(job, jobDir, signal) {
         originalName: file.name,
         progress: (p) => {
           const frac = (i + (k + Math.max(0, Math.min(1, p))) / files.length) / n;
-          job.progress = Math.max(job.progress, Math.min(0.99, frac));
+          const next = Math.max(job.progress, Math.min(0.99, frac));
+          if (next - job.progress >= 0.005) {
+            job.progress = next;
+            notifyJob(job);
+          }
         },
       });
       for (const o of outs) produced.push({ path: o, name: path.basename(o) });
@@ -198,6 +215,7 @@ async function runConvert(job, jobDir, signal) {
     if (!produced.length) throw new UserError('The conversion produced no output');
     files = produced;
     job.progress = Math.max(job.progress, (i + 1) / n * 0.99);
+    notifyJob(job);
   }
   if (job.renameTo) {
     const ext = `.${job.steps[n - 1].to}`;
@@ -214,10 +232,17 @@ async function runConvert(job, jobDir, signal) {
 
 async function runMerge(job, jobDir, signal) {
   job.stage = 'Merging';
+  notifyJob(job);
   const outDir = await ensureDir(path.join(jobDir, 'out'));
   const items = job.uploadIds.map((id) => uploads.get(id)).map((u) => ({ path: u.path, format: u.format, name: u.name }));
   const out = path.join(outDir, `${job.mergeName}.pdf`);
-  await mergeToPdf(items, job.options[0] || {}, out, { tmpDir: path.join(jobDir, 'tmp'), progress: (p) => { job.progress = Math.min(0.99, p); } });
+  await mergeToPdf(items, job.options[0] || {}, out, {
+    tmpDir: path.join(jobDir, 'tmp'),
+    progress: (p) => {
+      job.progress = Math.min(0.99, p);
+      notifyJob(job);
+    }
+  });
   if (signal.aborted) throw new UserError('Cancelled');
   job.outputs = [{ name: path.basename(out), path: out, size: await fileSize(out) }];
 }

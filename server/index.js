@@ -31,6 +31,7 @@ function meta() {
     aliases: ALIASES,
     targets: allTargets(),
     engines: engineStatus(),
+    isDocker: fs.existsSync('/.dockerenv'),
     limits: { maxUploadBytes: config.maxUploadBytes, retentionMinutes: config.retentionMinutes },
   };
 }
@@ -137,6 +138,43 @@ app.post('/api/merge', (req, res) => {
 app.get('/api/jobs', (req, res) => {
   const ids = String(req.query.ids || '').split(',').filter(Boolean).slice(0, 500);
   res.json(ids.map((id) => store.getJob(id)).filter(Boolean).map(store.jobJson));
+});
+
+// SSE endpoint for live streaming job progress
+app.get('/api/jobs/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  res.write(': connected\n\n');
+
+  const filterIds = req.query.ids ? new Set(String(req.query.ids).split(',').filter(Boolean)) : null;
+
+  const onUpdate = (job) => {
+    if (!filterIds || filterIds.has(job.id)) {
+      try {
+        const payload = JSON.stringify(store.jobJson(job));
+        res.write(`data: ${payload}\n\n`);
+      } catch {}
+    }
+  };
+
+  store.jobEvents.on('update', onUpdate);
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    store.jobEvents.off('update', onUpdate);
+  });
 });
 
 app.get('/api/jobs/:id', (req, res) => {

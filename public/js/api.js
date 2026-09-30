@@ -28,7 +28,7 @@ export const api = {
   jobs: (ids) => fetch(`/api/jobs?ids=${ids.join(',')}`).then(json),
   cancelJob: (id) => fetch(`/api/jobs/${id}/cancel`, { method: 'POST' }).catch(() => {}),
   deleteJob: (id) => fetch(`/api/jobs/${id}`, { method: 'DELETE' }).catch(() => {}),
-  downloadUrl: (jobId) => `/api/jobs/${jobId}/download`,
+  downloadUrl: (jobId, opts) => `/api/jobs/${jobId}/download${opts?.inline ? '?inline=1' : ''}`,
   fileUrl: (jobId, i, inline) => `/api/jobs/${jobId}/files/${i}${inline ? '?inline=1' : ''}`,
   uploadFileUrl: (uploadId) => `/api/uploads/${uploadId}/file`,
   downloadAllUrl:(ids) => `/api/download?jobs=${ids.join(',')}`,

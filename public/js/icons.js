@@ -31,6 +31,9 @@ const P = {
   stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   sparkle: '<path d="M12 3v4m0 10v4M3 12h4m10 0h4"/>',
   wand: '<path d="m4 20 11-11m-2-2 2-2 4 4-2 2-4-4Z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/>',
+  external: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+  fileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
 };
 
 export function icon(name, cls = '') {

@@ -2,6 +2,8 @@
 
 A self-hosted file converter in the spirit of CloudConvert: drop in almost any file, pick an output format, tune every setting, download. Everything runs locally on your machine.
 
+*[Leer en español](README.es.md)*
+
 ## Quick start
 
 ```bash

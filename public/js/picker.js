@@ -1,6 +1,7 @@
 // Format picker popover: categories on the left, formats on the right, instant search.
 import { h, $$, clamp } from './util.js';
 import { icon } from './icons.js';
+import { t, tCategory, tFormatName } from './i18n.js';
 
 const SUGGEST = {
   pdf: ['docx', 'jpg', 'png', 'txt', 'md', 'html', 'pdf'],
@@ -59,11 +60,21 @@ export function openPicker({ anchor, targets, current, from, meta, onPick, foote
   let query = '';
   let kbIndex = -1;
 
-  const search = h('input', { type: 'text', placeholder: 'Search formats…', 'aria-label': 'Search formats', autocomplete: 'off', spellcheck: 'false' });
-  const catList = h('div.picker-cats', { role: 'tablist' });
-  const grid = h('div.picker-grid');
-  const foot = h('div.picker-foot', footer || h('span', 'Type to search · ', h('kbd', 'Enter'), ' to pick · ', h('kbd', 'Esc'), ' to close'));
-  const pop = h('div.popover', { role: 'dialog', 'aria-label': 'Choose output format' },
+  const search = h('input', {
+    type: 'text',
+    placeholder: t('picker.searchPlaceholder'),
+    'aria-label': t('picker.searchPlaceholder'),
+    autocomplete: 'off',
+    spellcheck: 'false',
+    role: 'combobox',
+    'aria-expanded': 'true',
+    'aria-autocomplete': 'list',
+    'aria-controls': 'picker-grid',
+  });
+  const catList = h('div.picker-cats', { role: 'tablist', 'aria-label': t('a11y.formatsTablist') });
+  const grid = h('div.picker-grid', { id: 'picker-grid', role: 'tabpanel', 'aria-label': t('picker.ariaLabel') });
+  const foot = h('div.picker-foot', { 'aria-live': 'polite' }, footer || h('span', t('picker.hint')));
+  const pop = h('div.popover', { role: 'dialog', 'aria-modal': 'true', 'aria-label': t('picker.ariaLabel') },
     h('div.picker-search', icon('search'), search),
     h('div.picker-body', catList, grid),
     foot);
@@ -74,39 +85,58 @@ export function openPicker({ anchor, targets, current, from, meta, onPick, foote
   };
 
   function formatButtons(list) {
-    return h('div.picker-formats', list.map((f) => h('button', {
-      type: 'button',
-      class: f === current ? 'cur' : '',
-      title: meta.formats[f]?.name || f,
-      dataset: { fmt: f },
-      onclick: () => pick(f),
-      onmouseenter: () => { foot.replaceChildren(h('span', h('b', f.toUpperCase()), ' — ', meta.formats[f]?.name || '')); },
-    }, f)));
+    return h('div.picker-formats', { role: 'listbox', 'aria-label': t('picker.ariaLabel') }, list.map((f) => {
+      const name = tFormatName(f, meta.formats[f]?.name || f);
+      const isCur = f === current;
+      const btnId = `picker-fmt-${f}`;
+      return h('button', {
+        type: 'button',
+        id: btnId,
+        role: 'option',
+        class: isCur ? 'cur' : '',
+        'aria-selected': String(isCur),
+        title: name,
+        'aria-label': `${f.toUpperCase()} — ${name}`,
+        dataset: { fmt: f },
+        onclick: () => pick(f),
+        onmouseenter: () => { foot.replaceChildren(h('span', h('b', f.toUpperCase()), ' — ', name)); },
+      }, f);
+    }));
   }
 
   function renderCats() {
     const items = [];
-    if (suggested.length) items.push({ id: '__suggested', label: 'Suggested', n: suggested.length });
-    for (const c of cats) items.push({ id: c.id, label: c.label, n: targets.filter((t) => meta.formats[t]?.category === c.id).length });
-    catList.replaceChildren(...items.map((c) => h('button', {
-      type: 'button', role: 'tab', class: !query && c.id === activeCat ? 'on' : '', 'aria-selected': String(!query && c.id === activeCat),
-      onclick: () => { activeCat = c.id; query = ''; search.value = ''; kbIndex = -1; render(); search.focus(); },
-    }, h('span', c.label), h('span.n', c.n))));
+    if (suggested.length) items.push({ id: '__suggested', label: t('picker.suggested'), n: suggested.length });
+    for (const c of cats) items.push({ id: c.id, label: tCategory(c.id), n: targets.filter((t) => meta.formats[t]?.category === c.id).length });
+    catList.replaceChildren(...items.map((c) => {
+      const isSel = !query && c.id === activeCat;
+      const tabId = `picker-tab-${c.id}`;
+      return h('button', {
+        type: 'button',
+        role: 'tab',
+        id: tabId,
+        'aria-controls': 'picker-grid',
+        class: isSel ? 'on' : '',
+        'aria-selected': String(isSel),
+        tabindex: isSel ? '0' : '-1',
+        onclick: () => { activeCat = c.id; query = ''; search.value = ''; kbIndex = -1; render(); search.focus(); },
+      }, h('span', c.label), h('span.n', { 'aria-label': `${c.n}` }, c.n));
+    }));
   }
 
   function renderGrid() {
     grid.replaceChildren();
     if (query) {
       const q = query.toLowerCase().replace(/^\./, '');
-      const hits = targets.filter((t) => t.includes(q) || (meta.formats[t]?.name || '').toLowerCase().includes(q))
+      const hits = targets.filter((t) => t.includes(q) || (meta.formats[t]?.name || '').toLowerCase().includes(q) || tFormatName(t).toLowerCase().includes(q) || tCategory(meta.formats[t]?.category).toLowerCase().includes(q))
         .sort((a, b) => (a.startsWith(q) ? 0 : 1) - (b.startsWith(q) ? 0 : 1) || a.length - b.length);
-      if (!hits.length) { grid.append(h('div.picker-empty', `No output format matches “${query}”`)); return; }
+      if (!hits.length) { grid.append(h('div.picker-empty', { role: 'status' }, t('picker.noMatch', { query }))); return; }
       grid.append(formatButtons(hits));
     } else if (activeCat === '__suggested') {
-      grid.append(h('div.group-label', 'Suggested'), formatButtons(suggested));
+      grid.append(h('div.group-label', t('picker.suggested')), formatButtons(suggested));
       for (const c of cats) {
         const list = targets.filter((t) => meta.formats[t]?.category === c.id);
-        grid.append(h('div.group-label', c.label), formatButtons(list));
+        grid.append(h('div.group-label', tCategory(c.id)), formatButtons(list));
       }
     } else {
       grid.append(formatButtons(targets.filter((t) => meta.formats[t]?.category === activeCat)));
@@ -117,7 +147,15 @@ export function openPicker({ anchor, targets, current, from, meta, onPick, foote
   function highlight() {
     const btns = $$('.picker-formats button', grid);
     btns.forEach((b, i) => b.classList.toggle('kb', i === kbIndex));
-    if (kbIndex >= 0) btns[kbIndex]?.scrollIntoView({ block: 'nearest' });
+    if (kbIndex >= 0 && btns[kbIndex]) {
+      btns[kbIndex].scrollIntoView({ block: 'nearest' });
+      search.setAttribute('aria-activedescendant', btns[kbIndex].id);
+      const fmt = btns[kbIndex].dataset.fmt;
+      const name = tFormatName(fmt, meta.formats[fmt]?.name || fmt);
+      foot.replaceChildren(h('span', h('b', fmt.toUpperCase()), ' — ', name));
+    } else {
+      search.removeAttribute('aria-activedescendant');
+    }
   }
 
   function render() {
@@ -148,6 +186,15 @@ export function openPicker({ anchor, targets, current, from, meta, onPick, foote
   render();
 
   function position() {
+    if (window.innerWidth <= 640) {
+      pop.style.left = '8px';
+      pop.style.right = '8px';
+      pop.style.width = 'calc(100vw - 16px)';
+      pop.style.maxWidth = 'calc(100vw - 16px)';
+      pop.style.top = 'auto';
+      pop.style.bottom = '8px';
+      return;
+    }
     const r = anchor.getBoundingClientRect();
     const w = pop.offsetWidth;
     const ph = pop.offsetHeight;
@@ -159,6 +206,9 @@ export function openPicker({ anchor, targets, current, from, meta, onPick, foote
     top = clamp(top, 12, Math.max(12, window.innerHeight - ph - 12));
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
+    pop.style.right = 'auto';
+    pop.style.bottom = 'auto';
+    pop.style.width = '';
   }
   position();
   search.focus({ preventScroll: true });

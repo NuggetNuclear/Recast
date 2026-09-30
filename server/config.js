@@ -8,7 +8,7 @@ const num = (v, d) => (v !== undefined && v !== '' && !Number.isNaN(Number(v)) ?
 
 export const config = {
   appName: process.env.APP_NAME || 'Recast',
-  host: process.env.HOST || '127.0.0.1',
+  host: process.env.HOST || '0.0.0.0',
   port: num(process.env.PORT, 3000),
   dataDir: path.resolve(process.env.DATA_DIR || path.join(ROOT, 'data')),
   // Uploaded and converted files are removed after this many minutes.

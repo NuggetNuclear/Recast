@@ -1,6 +1,7 @@
 // Toasts, modals and the side drawer.
 import { h, $ } from './util.js';
 import { icon } from './icons.js';
+import { t } from './i18n.js';
 
 export function toast(message, { type = 'info', timeout = 4200 } = {}) {
   const el = h('div.toast', { class: type, role: type === 'error' ? 'alert' : 'status' }, icon(type === 'error' ? 'alert' : 'check'), h('span', message));
@@ -15,10 +16,11 @@ const stack = [];
 function trapKeys(e) {
   const top = stack[stack.length - 1];
   if (!top) return;
-  if (e.key === 'Escape') { e.preventDefault(); top.close(); }
+  if (e.key === 'Escape') { e.preventDefault(); top.close(); return; }
   if (e.key === 'Tab') {
-    const focusables = [...top.el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && x.offsetParent !== null);
-    if (!focusables.length) return;
+    const focusables = [...top.el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter((x) => !x.disabled && !x.hidden && x.getAttribute('aria-hidden') !== 'true');
+    if (!focusables.length) { e.preventDefault(); return; }
     const first = focusables[0];
     const last = focusables[focusables.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
@@ -26,6 +28,14 @@ function trapKeys(e) {
   }
 }
 document.addEventListener('keydown', trapKeys);
+
+function setBackgroundInert(inert) {
+  const bgEls = [$('.topbar'), $('#view'), $('.footer')].filter(Boolean);
+  for (const el of bgEls) {
+    if (inert) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  }
+}
 
 function layer(el, backdrop, onClose) {
   const previous = document.activeElement;
@@ -36,23 +46,35 @@ function layer(el, backdrop, onClose) {
       if (i >= 0) stack.splice(i, 1);
       el.remove();
       backdrop?.remove();
-      if (!stack.length) document.body.style.overflow = '';
+      if (!stack.length) {
+        document.body.style.overflow = '';
+        setBackgroundInert(false);
+      }
       onClose?.();
       previous?.focus?.({ preventScroll: true });
     },
   };
   stack.push(entry);
   document.body.style.overflow = 'hidden';
+  if (stack.length === 1) setBackgroundInert(true);
   return entry;
 }
 
 /** A centred modal. Returns { close, body, foot }. */
 export function modal({ title, subtitle, body, actions = [], size = '', onClose }) {
+  const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`;
+  const descId = subtitle ? `modal-desc-${Math.random().toString(36).slice(2, 9)}` : null;
   const bodyEl = h('div.modal-body', body);
   const foot = actions.length ? h('div.modal-foot', actions) : null;
-  const closeBtn = h('button.icon-btn.close', { type: 'button', 'aria-label': 'Close' }, icon('x'));
-  const box = h('div.modal', { class: size, role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-    h('div.modal-head', h('div', h('h2', title), subtitle ? h('p', subtitle) : null), closeBtn), bodyEl, foot);
+  const closeBtn = h('button.icon-btn.close', { type: 'button', 'aria-label': t('a11y.closeModal') }, icon('x'));
+  const box = h('div.modal', {
+    class: size,
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': titleId,
+    ...(descId ? { 'aria-describedby': descId } : {}),
+  },
+    h('div.modal-head', h('div', h('h2', { id: titleId }, title), subtitle ? h('p', { id: descId }, subtitle) : null), closeBtn), bodyEl, foot);
   const backdrop = h('div.backdrop');
   const wrap = h('div.modal-wrap', box);
   wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) entry.close(); });
@@ -65,10 +87,17 @@ export function modal({ title, subtitle, body, actions = [], size = '', onClose 
 
 /** A right-hand drawer. */
 export function drawer({ title, subtitle, head, body, actions = [], onClose }) {
-  const closeBtn = h('button.icon-btn.close', { type: 'button', 'aria-label': 'Close' }, icon('x'));
+  const titleId = `drawer-title-${Math.random().toString(36).slice(2, 9)}`;
+  const descId = subtitle ? `drawer-desc-${Math.random().toString(36).slice(2, 9)}` : null;
+  const closeBtn = h('button.icon-btn.close', { type: 'button', 'aria-label': t('a11y.closeDrawer') }, icon('x'));
   const bodyEl = h('div.drawer-body', body);
-  const el = h('aside.drawer', { role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-    h('div.drawer-head', h('div', { style: { minWidth: 0 } }, h('h2', title), subtitle ? h('div.sub', subtitle) : null, head), closeBtn),
+  const el = h('aside.drawer', {
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': titleId,
+    ...(descId ? { 'aria-describedby': descId } : {}),
+  },
+    h('div.drawer-head', h('div', { style: { minWidth: 0 } }, h('h2', { id: titleId }, title), subtitle ? h('div.sub', { id: descId }, subtitle) : null, head), closeBtn),
     bodyEl,
     actions.length ? h('div.drawer-foot', actions) : null);
   const backdrop = h('div.backdrop');
@@ -80,11 +109,13 @@ export function drawer({ title, subtitle, head, body, actions = [], onClose }) {
   return { close: entry.close, body: bodyEl, el };
 }
 
+
 export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('Copied to clipboard');
+    toast(t('toast.copied'));
   } catch {
-    toast('Could not copy', { type: 'error' });
+    toast(t('toast.cannotCopy'), { type: 'error' });
   }
 }
+
