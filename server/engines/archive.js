@@ -67,7 +67,9 @@ async function listFiles(dir) {
 
 async function assertSafeArchive(input, password) {
   const { stdout } = await run(tools.sevenZip, ['l', '-slt', `-p${password || 'none'}`, '-sccUTF-8', input], { timeoutMs: 30000, okCodes: [0, 1, 2] });
-  for (const line of stdout.split(/\r?\n/)) if (line.startsWith('Path = ')) assertArchiveEntry(line.slice(7));
+  const parts = stdout.split(/^-{10,}\r?\n/m);
+  const entriesText = parts.slice(1).join('\n');
+  for (const line of entriesText.split(/\r?\n/)) if (line.startsWith('Path = ')) assertArchiveEntry(line.slice(7));
 }
 
 async function convert({ input, from, to, o, outDir, baseName, tmpDir, signal, progress, originalName }) {
@@ -96,6 +98,7 @@ async function convert({ input, from, to, o, outDir, baseName, tmpDir, signal, p
     const first = await listFiles(content);
     if (first.length === 1 && /\.tar$/i.test(first[0]) && /^(tar\.|gz|bz2|xz|z|zst)/.test(from)) {
       const tarPath = path.join(content, first[0]);
+      await assertSafeArchive(tarPath);
       await sevenZip(['x', `-o${content}`, tarPath], { signal });
       await fsp.rm(tarPath, { force: true });
     }

@@ -54,7 +54,7 @@ export function validateOptions(value, label = 'option') {
 
 export function assertArchiveEntry(name) {
   const entry = String(name || '').replaceAll('\\', '/');
-  if (!entry || entry.startsWith('/') || /^[a-zA-Z]:\//.test(entry) || entry.split('/').includes('..')) throw new UserError('The archive contains an unsafe path');
+  if (!entry || entry.startsWith('/') || /^[a-zA-Z]:/i.test(entry) || entry.split('/').includes('..')) throw new UserError('The archive contains an unsafe path');
   return path.posix.normalize(entry);
 }
 
@@ -63,7 +63,7 @@ export function basicAuthValid(header, user, password) {
   let supplied;
   try { supplied = Buffer.from(header.slice(6), 'base64').toString('utf8'); } catch { return false; }
   const expected = `${user}:${password}`;
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const a = crypto.createHash('sha256').update(supplied).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
 }

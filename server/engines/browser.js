@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { f, group, PAPER_SIZES, paperMm } from '../schema.js';
 import { tools } from '../tools.js';
@@ -139,7 +139,7 @@ async function convert({ input, from, to, o, outDir, baseName, signal, progress 
       const target = request.url();
       if (!target.startsWith('file://')) return request.abort();
       try {
-        const local = path.resolve(new URL(target).pathname);
+        const local = path.resolve(fileURLToPath(target));
         return local === path.resolve(input) || local.startsWith(`${path.resolve(root)}${path.sep}`) ? request.continue() : request.abort();
       } catch { return request.abort(); }
     });
