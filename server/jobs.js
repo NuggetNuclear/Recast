@@ -184,7 +184,11 @@ async function run(job) {
     job.progress = 1;
     job.stage = 'Done';
     notifyJob(job);
-  } catch (err) {
+  } catch (caught) {
+    let err = caught;
+    if (!err.userFacing && /exceeds pixel limit/i.test(err.message)) {
+      err = new UserError(`This image has more than ${Math.round(config.maxPixels / 1e6)} megapixels. Raise MAX_IMAGE_PIXELS to convert it.`);
+    }
     const cancelled = signal.aborted && Date.now() - job.startedAt < config.jobTimeoutMs;
     job.status = cancelled ? 'cancelled' : 'error';
     job.stage = cancelled ? 'Cancelled' : 'Failed';
