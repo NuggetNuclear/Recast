@@ -8,7 +8,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ZipArchive } from 'archiver';
 import sharp from 'sharp';
+import { PDFDocument } from 'pdf-lib';
+import { createRequire } from 'node:module';
 import { tools } from '../server/tools.js';
+import { run } from '../server/util.js';
+import { probe } from '../server/engines/ff.js';
 import image from '../server/engines/image.js';
 import imagepdf from '../server/engines/imagepdf.js';
 import data from '../server/engines/data.js';
@@ -21,10 +25,25 @@ import font from '../server/engines/font.js';
 import sheet from '../server/engines/sheet.js';
 import browser from '../server/engines/browser.js';
 
+const XLSX = createRequire(import.meta.url)('xlsx');
+
 async function withDir(fn) {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'recast-test-'));
   try { return await fn(dir); } finally { await fsp.rm(dir, { recursive: true, force: true }); }
 }
+
+
+// The engines build their own output paths, so an extension check proves nothing: read the file's magic bytes.
+const head = (file, n = 12) => fs.readFileSync(file).subarray(0, n);
+function assertMagic(file, label, ...signatures) {
+  const bytes = head(file, 16);
+  assert.ok(bytes.length > 0, `${label}: output is empty`);
+  const ok = signatures.some(([offset, sig]) => bytes.subarray(offset, offset + sig.length).equals(Buffer.from(sig, 'latin1')));
+  assert.ok(ok, `${label}: unexpected file header ${bytes.toString('hex')}`);
+}
+const JPEG = [0, [0xff, 0xd8, 0xff]];
+const PDF = [0, '%PDF-'];
+const ZIP = [0, 'PK'];
 
 const ctx = (input, from, to, outDir, tmpDir) => ({ input, from, to, o: {}, outDir, baseName: 'result', tmpDir, signal: new AbortController().signal, progress() {} });
 
@@ -33,6 +52,9 @@ test('bundled image conversion', () => withDir(async (dir) => {
   await sharp({ create: { width: 2, height: 2, channels: 4, background: '#ff0000' } }).png().toFile(input);
   const out = await image.convert(ctx(input, 'png', 'jpg', dir, dir));
   assert.equal(path.extname(out[0]), '.jpg');
+  assertMagic(out[0], 'jpg', JPEG);
+  const meta = await sharp(out[0]).metadata();
+  assert.deepEqual([meta.format, meta.width, meta.height], ['jpeg', 2, 2]);
 }));
 
 test('bundled image to PDF conversion', () => withDir(async (dir) => {
@@ -40,6 +62,8 @@ test('bundled image to PDF conversion', () => withDir(async (dir) => {
   await sharp({ create: { width: 2, height: 2, channels: 4, background: '#00ff00' } }).png().toFile(input);
   const out = await imagepdf.convert(ctx(input, 'png', 'pdf', dir, dir));
   assert.equal(path.extname(out[0]), '.pdf');
+  assertMagic(out[0], 'pdf', PDF);
+  assert.equal((await PDFDocument.load(fs.readFileSync(out[0]))).getPageCount(), 1);
 }));
 
 test('bundled data conversion', () => withDir(async (dir) => {
@@ -71,6 +95,8 @@ test('bundled media conversion', { skip: !tools.ffmpeg }, () => withDir(async (d
   });
   const out = await media.convert(ctx(input, 'wav', 'mp3', dir, dir));
   assert.equal(path.extname(out[0]), '.mp3');
+  const probed = await probe(out[0]);
+  assert.ok(probed.audio?.length >= 1 && probed.duration > 0, 'mp3 must contain a decodable audio stream');
 }));
 
 test('bundled archive conversion when 7-Zip is available', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
@@ -78,6 +104,7 @@ test('bundled archive conversion when 7-Zip is available', { skip: !tools.sevenZ
   await fsp.writeFile(input, 'archive me');
   const out = await archive.convert(ctx(input, 'txt', 'zip', dir, dir));
   assert.equal(path.extname(out[0]), '.zip');
+  assertMagic(out[0], 'zip', ZIP);
 }));
 
 function createZip(filePath, entries) {
@@ -154,11 +181,13 @@ test('archive zip to tar round trip', { skip: !tools.sevenZip }, () => withDir(a
   await createZip(zipPath, { 'hello.txt': 'Hello Recast' });
   const outTar = await archive.convert(ctx(zipPath, 'zip', 'tar', dir, path.join(dir, 't1')));
   assert.equal(path.extname(outTar[0]), '.tar');
-  assert.equal(fs.existsSync(outTar[0]), true);
+  assert.equal(fs.readFileSync(outTar[0]).subarray(257, 262).toString('latin1'), 'ustar', 'tar header magic');
 
   const outZip = await archive.convert(ctx(outTar[0], 'tar', 'zip', dir, path.join(dir, 't2')));
   assert.equal(path.extname(outZip[0]), '.zip');
-  assert.equal(fs.existsSync(outZip[0]), true);
+  assertMagic(outZip[0], 'zip', ZIP);
+  const listing = await run(tools.sevenZip, ['l', outZip[0]]);
+  assert.match(listing.stdout, /hello\.txt/, 'the file must survive the zip -> tar -> zip round trip');
 }));
 
 test('archive with zip-slip entry is rejected', { skip: !tools.sevenZip }, () => withDir(async (dir) => {
@@ -253,11 +282,11 @@ test('bundled font conversion (fonteditor-core)', () => withDir(async (dir) => {
   const sampleWoff2 = path.resolve('node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2');
   const outTtf = await font.convert(ctx(sampleWoff2, 'woff2', 'ttf', dir, dir));
   assert.equal(path.extname(outTtf[0]), '.ttf');
-  assert.equal(fs.existsSync(outTtf[0]), true);
+  assertMagic(outTtf[0], 'ttf', [0, [0, 1, 0, 0]], [0, 'OTTO'], [0, 'true']);
 
   const outWoff = await font.convert(ctx(outTtf[0], 'ttf', 'woff', dir, dir));
   assert.equal(path.extname(outWoff[0]), '.woff');
-  assert.equal(fs.existsSync(outWoff[0]), true);
+  assertMagic(outWoff[0], 'woff', [0, 'wOFF']);
 }));
 
 test('bundled spreadsheet conversion (SheetJS)', () => withDir(async (dir) => {
@@ -265,7 +294,9 @@ test('bundled spreadsheet conversion (SheetJS)', () => withDir(async (dir) => {
   await fsp.writeFile(input, 'name,score\nAlice,100\nBob,90\n');
   const out = await sheet.convert(ctx(input, 'csv', 'xlsx', dir, dir));
   assert.equal(path.extname(out[0]), '.xlsx');
-  assert.equal(fs.existsSync(out[0]), true);
+  assertMagic(out[0], 'xlsx', ZIP);
+  const book = XLSX.read(fs.readFileSync(out[0]));
+  assert.deepEqual(XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]), [{ name: 'Alice', score: 100 }, { name: 'Bob', score: 90 }]);
 }));
 
 test('bundled video media conversion', { skip: !tools.ffmpeg }, () => withDir(async (dir) => {
@@ -277,7 +308,10 @@ test('bundled video media conversion', { skip: !tools.ffmpeg }, () => withDir(as
   });
   const out = await media.convert(ctx(input, 'mkv', 'mp4', dir, dir));
   assert.equal(path.extname(out[0]), '.mp4');
-  assert.equal(fs.existsSync(out[0]), true);
+  assert.equal(head(out[0], 12).subarray(4, 8).toString('latin1'), 'ftyp', 'mp4 header');
+  const probed = await probe(out[0]);
+  assert.equal(probed.video?.width, 64);
+  assert.ok(probed.duration > 0.3, 'mp4 must have its duration');
 }));
 
 test('bundled browser html to pdf conversion', async (t) => {
@@ -292,7 +326,10 @@ test('bundled browser html to pdf conversion', async (t) => {
     try {
       const out = await browser.convert(ctx(input, 'html', 'pdf', dir, dir));
       assert.equal(path.extname(out[0]), '.pdf');
-      assert.equal(fs.existsSync(out[0]), true);
+      assertMagic(out[0], 'pdf', PDF);
+      const doc = await PDFDocument.load(fs.readFileSync(out[0]));
+      assert.ok(doc.getPageCount() >= 1);
+      assert.ok(fs.statSync(out[0]).size > 1000, 'a rendered page is not a near-empty PDF');
     } finally {
       await browser.shutdown();
     }
